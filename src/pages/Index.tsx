@@ -1,10 +1,15 @@
-import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { ArrowRight, Zap, Shield, Truck } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowRight, Zap, Shield, Truck, Search as SearchIcon, X } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { ProductCard } from '@/components/product/ProductCard';
-import { products, categories } from '@/data/products';
-import { useState } from 'react';
+import { ProductsPagination } from '@/components/ui/ProductsPagination';
+import { fetchProducts } from '@/api/products';
+import { useState, useEffect } from 'react';
+
+const CATEGORIES = ['All', 'Apple', 'Samsung', 'Google', 'OnePlus', 'Xiaomi', 'Nothing'];
+const DEFAULT_LIMIT = 10;
+const SEARCH_DEBOUNCE_MS = 700;
 
 const features = [
   { icon: Zap, label: 'Fast Delivery' },
@@ -14,10 +19,45 @@ const features = [
 
 const Index = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
-  
-  const filteredProducts = selectedCategory === 'All' 
-    ? products 
-    : products.filter(p => p.category === selectedCategory);
+  const [page, setPage] = useState(1);
+  const [searchBarOpen, setSearchBarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const isSearchMode = searchBarOpen && debouncedSearch.length > 0;
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['products', selectedCategory, page],
+    queryFn: () =>
+      fetchProducts({
+        category: selectedCategory === 'All' ? undefined : selectedCategory,
+        page,
+        limit: DEFAULT_LIMIT,
+      }),
+    enabled: !isSearchMode,
+  });
+
+  const searchQueryResult = useQuery({
+    queryKey: ['products', 'search', debouncedSearch, page],
+    queryFn: () =>
+      fetchProducts({
+        q: debouncedSearch,
+        search: debouncedSearch,
+        page,
+        limit: DEFAULT_LIMIT,
+      }),
+    enabled: isSearchMode,
+  });
+
+  const products = isSearchMode ? (searchQueryResult.data?.data ?? []) : (data?.data ?? []);
+  const pagination = isSearchMode ? searchQueryResult.data?.pagination : data?.pagination;
+  const isLoadingProducts = isSearchMode ? searchQueryResult.isLoading : isLoading;
+  const isErrorProducts = isSearchMode ? searchQueryResult.isError : isError;
 
   return (
     <div className="page-transition">
@@ -31,9 +71,8 @@ const Index = () => {
           alt="Black iPhone"
           className="w-full h-full object-cover object-center"
         />
-        {/* Subtle gradient overlay for better text contrast */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/20 to-transparent" />
-        
+
         <div className="absolute inset-0 flex items-center">
           <div className="container-mobile w-full px-4 md:px-6 lg:px-8">
             <motion.div
@@ -52,10 +91,16 @@ const Index = () => {
               <p className="text-white/95 text-sm md:text-base mb-6 max-w-[320px] leading-relaxed drop-shadow-md">
                 Discover the latest flagship smartphones from top brands at unbeatable prices.
               </p>
-              <Link to="/product/1" className="btn-accent inline-flex items-center gap-2 shadow-lg hover:shadow-xl transition-shadow">
+              <button
+                type="button"
+                onClick={() =>
+                  document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' })
+                }
+                className="btn-accent inline-flex items-center gap-2 shadow-lg hover:shadow-xl transition-shadow"
+              >
                 Shop Now
                 <ArrowRight className="w-4 h-4" />
-              </Link>
+              </button>
             </motion.div>
           </div>
         </div>
@@ -82,11 +127,14 @@ const Index = () => {
       {/* Categories */}
       <section className="container-mobile py-4">
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4">
-          {categories.map((category) => (
+          {CATEGORIES.map((category) => (
             <motion.button
               key={category}
               whileTap={{ scale: 0.95 }}
-              onClick={() => setSelectedCategory(category)}
+              onClick={() => {
+                setSelectedCategory(category);
+                setPage(1);
+              }}
               className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-300 ${
                 selectedCategory === category
                   ? 'gradient-primary text-primary-foreground shadow-glow'
@@ -100,53 +148,102 @@ const Index = () => {
       </section>
 
       {/* Products Grid */}
-      <section className="px-4 lg:px-8 xl:px-16 max-w-7xl mx-auto pb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-xl font-bold">
+      <section id="products" className="px-4 lg:px-8 xl:px-16 max-w-7xl mx-auto pb-8 scroll-mt-4">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h2 className="font-display text-xl font-bold shrink-0">
             {selectedCategory === 'All' ? 'All Phones' : selectedCategory}
           </h2>
-          <span className="text-sm text-muted-foreground font-medium">
-            {filteredProducts.length} devices
-          </span>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-          {filteredProducts.map((product, index) => (
-            <ProductCard key={product.id} product={product} index={index} />
-          ))}
-        </div>
-      </section>
-
-      {/* Promo Banner */}
-      <section className="container-mobile pb-8">
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          className="relative overflow-hidden rounded-2xl p-6"
-          style={{ background: 'var(--gradient-hero)' }}
-        >
-          <div className="relative z-10 text-primary-foreground">
-            <p className="text-xs uppercase tracking-wider opacity-80 mb-1">
-              Limited Time Offer
-            </p>
-            <h3 className="font-display text-xl font-bold mb-2">
-              Trade-In & Save
-            </h3>
-            <p className="text-sm opacity-90 mb-4">
-              Get up to $500 off when you trade in your old device.
-            </p>
-            <Link 
-              to="/product/2"
-              className="inline-flex items-center gap-2 text-sm font-semibold bg-primary-foreground/20 backdrop-blur-sm px-4 py-2 rounded-lg hover:bg-primary-foreground/30 transition-colors"
-            >
-              Learn More
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+          <div className="flex items-center gap-2 min-w-0 flex-1 justify-end">
+            <AnimatePresence mode="wait">
+              {searchBarOpen ? (
+                <motion.div
+                  key="input"
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: 'auto', opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="relative flex items-center min-w-[120px] max-w-[180px] sm:max-w-[220px]"
+                >
+                  <SearchIcon className="absolute left-2.5 w-4 h-4 text-muted-foreground pointer-events-none shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setPage(1);
+                    }}
+                    className="h-9 w-full rounded-xl border border-border bg-card pl-8 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchBarOpen(false);
+                      setSearchQuery('');
+                      setPage(1);
+                    }}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted text-muted-foreground"
+                    aria-label="Close search"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.button
+                  key="btn"
+                  type="button"
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setSearchBarOpen(true)}
+                  className="p-2 rounded-xl text-muted-foreground hover:text-primary hover:bg-secondary transition-colors shrink-0"
+                  aria-label="Search"
+                >
+                  <SearchIcon className="w-5 h-5" />
+                </motion.button>
+              )}
+            </AnimatePresence>
+            {pagination && (
+              <span className="text-sm text-muted-foreground font-medium shrink-0">
+                {isSearchMode ? `${pagination.total} results` : `${pagination.total} devices`}
+              </span>
+            )}
           </div>
-          <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-primary-foreground/10 -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-24 h-24 rounded-full bg-primary-foreground/10 translate-y-1/2 -translate-x-1/2" />
-        </motion.div>
+        </div>
+
+        {isLoadingProducts ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="card-product aspect-square rounded-2xl bg-muted animate-pulse"
+              />
+            ))}
+          </div>
+        ) : isErrorProducts ? (
+          <div className="py-12 text-center">
+            <p className="text-destructive font-medium">Something went wrong.</p>
+            <p className="text-sm text-muted-foreground mt-1">Please try again later.</p>
+          </div>
+        ) : products.length === 0 ? (
+          <div className="py-12 text-center text-muted-foreground">
+            {isSearchMode ? `No results for "${debouncedSearch}"` : 'No phones in this category.'}
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+              {products.map((product, index) => (
+                <ProductCard key={product.id} product={product} index={index} />
+              ))}
+            </div>
+            {pagination && (
+              <ProductsPagination
+                pagination={pagination}
+                onPageChange={setPage}
+                isLoading={isLoadingProducts}
+              />
+            )}
+          </>
+        )}
       </section>
 
       <MobileNav />

@@ -1,12 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Check, ShoppingBag, Star, Cpu, Camera, Battery, Smartphone } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { ColorSelector } from '@/components/ui/ColorSelector';
 import { QuantitySelector } from '@/components/ui/QuantitySelector';
-import { products } from '@/data/products';
+import { fetchProductById } from '@/api/products';
 import { useCartStore } from '@/store/cartStore';
 import { toast } from 'sonner';
 
@@ -18,21 +19,54 @@ const specs = [
 ];
 
 const ProductDetail = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const product = products.find((p) => p.id === id);
+  const { id } = useParams<{ id: string }>();
   const addItem = useCartStore((state) => state.addItem);
 
-  const [selectedColor, setSelectedColor] = useState<string | undefined>(
-    product?.colors?.[0]
-  );
+  const { data: product, isLoading, isError } = useQuery({
+    queryKey: ['product', id],
+    queryFn: () => fetchProductById(id!),
+    enabled: !!id,
+  });
+
+  const [selectedColor, setSelectedColor] = useState<string | undefined>();
   const [quantity, setQuantity] = useState(1);
   const [isAdded, setIsAdded] = useState(false);
+
+  useEffect(() => {
+    if (product?.colors?.length) setSelectedColor(product.colors[0]);
+  }, [product]);
+
+  if (!id) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">Invalid product</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="page-transition flex items-center justify-center min-h-[60vh]">
+        <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="font-medium text-destructive">Something went wrong.</p>
+          <p className="text-sm text-muted-foreground mt-1">Please try again later.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!product) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Product not found</p>
+        <p className="text-muted-foreground">Product not found</p>
       </div>
     );
   }
