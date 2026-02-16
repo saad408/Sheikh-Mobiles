@@ -79,12 +79,11 @@ export async function request<T>(path: string, config: RequestConfig = {}): Prom
   }
 
   if (!res.ok) {
+    const obj = data && typeof data === 'object' ? (data as Record<string, unknown>) : null;
     const message =
-      (data && typeof data === 'object' && 'message' in data && typeof (data as { message: unknown }).message === 'string')
-        ? (data as { message: string }).message
-        : res.status === 500
-          ? `Server error (${res.status}). Check backend logs.`
-          : `Request failed (${res.status})`;
+      (obj && typeof obj.error === 'string' && obj.error) ||
+      (obj && typeof obj.message === 'string' && obj.message) ||
+      (res.status === 500 ? `Server error (${res.status}). Check backend logs.` : `Request failed (${res.status})`);
     throw new ApiError(message, res.status, data);
   }
 

@@ -5,9 +5,8 @@ import { MobileNav } from '@/components/layout/MobileNav';
 import { ProductCard } from '@/components/product/ProductCard';
 import { ProductsPagination } from '@/components/ui/ProductsPagination';
 import { fetchProducts } from '@/api/products';
-import { useState, useEffect } from 'react';
-
-const CATEGORIES = ['All', 'Apple', 'Samsung', 'Google', 'OnePlus', 'Xiaomi', 'Nothing'];
+import { getCategories } from '@/api/categories';
+import { useState, useEffect, useMemo } from 'react';
 const DEFAULT_LIMIT = 10;
 const SEARCH_DEBOUNCE_MS = 700;
 
@@ -28,6 +27,17 @@ const Index = () => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  const { data: categoriesData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: getCategories,
+  });
+
+  const categoryChips = useMemo(() => {
+    const list = categoriesData ?? [];
+    const sorted = [...list].sort((a, b) => a.order - b.order);
+    return ['All', ...sorted.map((c) => c.name)];
+  }, [categoriesData]);
 
   const isSearchMode = searchBarOpen && debouncedSearch.length > 0;
 
@@ -127,7 +137,7 @@ const Index = () => {
       {/* Categories */}
       <section className="container-mobile py-4">
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4">
-          {CATEGORIES.map((category) => (
+          {categoryChips.map((category) => (
             <motion.button
               key={category}
               whileTap={{ scale: 0.95 }}

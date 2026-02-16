@@ -9,14 +9,22 @@ import { ColorSelector } from '@/components/ui/ColorSelector';
 import { QuantitySelector } from '@/components/ui/QuantitySelector';
 import { fetchProductById } from '@/api/products';
 import { useCartStore } from '@/store/cartStore';
+import type { ProductSpecs } from '@/store/cartStore';
 import { toast } from 'sonner';
 
-const specs = [
-  { icon: Cpu, label: 'Processor', value: 'Latest Gen' },
-  { icon: Camera, label: 'Camera', value: 'Pro Grade' },
-  { icon: Battery, label: 'Battery', value: 'All-Day' },
-  { icon: Smartphone, label: 'Display', value: 'OLED' },
+const SPEC_LABELS: { key: keyof ProductSpecs; label: string; icon: typeof Cpu }[] = [
+  { key: 'processor', label: 'Processor', icon: Cpu },
+  { key: 'camera', label: 'Camera', icon: Camera },
+  { key: 'battery', label: 'Battery', icon: Battery },
+  { key: 'display', label: 'Display', icon: Smartphone },
 ];
+
+const DEFAULT_SPECS: ProductSpecs = {
+  processor: '',
+  camera: '',
+  battery: '',
+  display: '',
+};
 
 const ProductDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,7 +41,7 @@ const ProductDetail = () => {
   const [isAdded, setIsAdded] = useState(false);
 
   useEffect(() => {
-    if (product?.colors?.length) setSelectedColor(product.colors[0]);
+    if (product?.colors?.length) setSelectedColor(product.colors[0].name);
   }, [product]);
 
   if (!id) {
@@ -134,20 +142,24 @@ const ProductDetail = () => {
             transition={{ delay: 0.2 }}
             className="grid grid-cols-4 lg:grid-cols-2 gap-2 lg:gap-3 mb-6"
           >
-            {specs.map((spec) => (
-              <div
-                key={spec.label}
-                className="flex flex-col items-center gap-1.5 p-3 bg-secondary rounded-xl"
-              >
-                <spec.icon className="w-5 h-5 text-primary" />
-                <span className="text-[10px] text-muted-foreground">{spec.label}</span>
-                <span className="text-xs font-semibold">{spec.value}</span>
-              </div>
-            ))}
+            {SPEC_LABELS.map(({ key, label, icon: Icon }) => {
+              const specs = product.specs ?? DEFAULT_SPECS;
+              const value = specs[key]?.trim() || '—';
+              return (
+                <div
+                  key={key}
+                  className="flex flex-col items-center gap-1.5 p-3 bg-secondary rounded-xl"
+                >
+                  <Icon className="w-5 h-5 text-primary" />
+                  <span className="text-[10px] text-muted-foreground">{label}</span>
+                  <span className="text-xs font-semibold">{value}</span>
+                </div>
+              );
+            })}
           </motion.div>
 
           {/* Color Selection */}
-          {product.colors && (
+          {product.colors && product.colors.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

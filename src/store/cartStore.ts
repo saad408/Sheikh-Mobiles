@@ -1,6 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export interface ProductSpecs {
+  processor: string;
+  camera: string;
+  battery: string;
+  display: string;
+}
+
+export interface ProductColor {
+  name: string;
+  hex: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -9,7 +21,8 @@ export interface Product {
   category: string;
   description: string;
   sizes?: string[];
-  colors?: string[];
+  colors?: ProductColor[];
+  specs?: ProductSpecs;
 }
 
 export interface CartItem extends Product {
