@@ -47,7 +47,10 @@ export default function AdminCategoryNew() {
             <input
               id="name"
               value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, name: e.target.value }));
+                setError('');
+              }}
               placeholder="e.g. Apple"
               required
               className="input-field mt-1.5"

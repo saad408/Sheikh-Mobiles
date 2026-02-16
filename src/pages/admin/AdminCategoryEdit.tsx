@@ -93,7 +93,10 @@ export default function AdminCategoryEdit() {
             <input
               id="name"
               value={form.name ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, name: e.target.value }));
+                setError('');
+              }}
               required
               className="input-field mt-1.5"
             />

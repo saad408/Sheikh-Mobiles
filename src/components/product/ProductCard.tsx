@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Product } from '@/store/cartStore';
+import { getProductImageUrl } from '@/lib/api';
 import { Star } from 'lucide-react';
 
 interface ProductCardProps {
@@ -19,7 +20,7 @@ export const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
         <div className="card-product">
           <div className="aspect-square bg-gradient-to-br from-muted to-secondary overflow-hidden p-4">
             <motion.img
-              src={product.image}
+              src={getProductImageUrl(product.image)}
               alt={product.name}
               className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110"
             />

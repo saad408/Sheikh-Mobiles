@@ -8,6 +8,7 @@ import { MobileNav } from '@/components/layout/MobileNav';
 import { ColorSelector } from '@/components/ui/ColorSelector';
 import { QuantitySelector } from '@/components/ui/QuantitySelector';
 import { fetchProductById } from '@/api/products';
+import { getProductImageUrl } from '@/lib/api';
 import { useCartStore } from '@/store/cartStore';
 import type { ProductSpecs } from '@/store/cartStore';
 import { toast } from 'sonner';
@@ -39,10 +40,14 @@ const ProductDetail = () => {
   const [selectedColor, setSelectedColor] = useState<string | undefined>();
   const [quantity, setQuantity] = useState(1);
   const [isAdded, setIsAdded] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     if (product?.colors?.length) setSelectedColor(product.colors[0].name);
   }, [product]);
+  useEffect(() => {
+    setImageError(false);
+  }, [product?.image]);
 
   if (!id) {
     return (
@@ -87,7 +92,7 @@ const ProductDetail = () => {
     });
     setTimeout(() => setIsAdded(false), 2000);
   };
-
+console.log(getProductImageUrl(product.image));
   return (
     <div className="page-transition">
       <Header showBack transparent actions={['share']} />
@@ -98,13 +103,22 @@ const ProductDetail = () => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="relative aspect-square lg:aspect-auto lg:w-1/2 lg:h-[500px] -mt-14 lg:mt-0 bg-gradient-to-br from-muted via-secondary to-muted p-6 lg:p-8 lg:rounded-2xl"
+          className="relative aspect-square lg:aspect-auto lg:w-1/2 lg:h-[500px] -mt-14 lg:mt-0 bg-gradient-to-br from-muted via-secondary to-muted p-6 lg:p-8 lg:rounded-2xl flex items-center justify-center"
         >
-          <img
-            src={product.image}
-            alt={product.name}
-            className="w-full h-full object-contain drop-shadow-2xl"
-          />
+          {imageError || !product.image ? (
+            <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              <ShoppingBag className="w-16 h-16 opacity-50" />
+              <span className="text-sm">No image</span>
+            </div>
+          ) : (
+            <img
+              key={product.image}
+              src={getProductImageUrl(product.image)}
+              alt={product.name}
+              className="w-full h-full object-contain drop-shadow-2xl"
+              onError={() => setImageError(true)}
+            />
+          )}
         </motion.div>
 
         {/* Product Info */}

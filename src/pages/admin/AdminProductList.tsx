@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { fetchProducts } from '@/api/products';
 import { deleteProduct } from '@/api/admin-products';
+import { getProductImageUrl } from '@/lib/api';
 import { ProductsPagination } from '@/components/ui/ProductsPagination';
 import { Button } from '@/components/ui/button';
 import {
@@ -101,7 +102,7 @@ export default function AdminProductList() {
                   <TableRow key={p.id} className="border-border">
                     <TableCell>
                       <img
-                        src={p.image}
+                        src={getProductImageUrl(p.image)}
                         alt=""
                         className="w-12 h-12 object-contain rounded-lg bg-muted"
                       />

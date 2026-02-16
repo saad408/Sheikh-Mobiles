@@ -3,10 +3,26 @@
  * Uses VITE_API_URL; falls back to http://localhost:3001.
  */
 
+const DEFAULT_API_BASE = 'http://localhost:3001';
+
 export const getApiBaseUrl = (): string => {
   const url = import.meta.env.VITE_API_URL;
-  return (typeof url === 'string' ? url : 'http://localhost:3001').replace(/\/$/, '');
+  const resolved =
+    typeof url === 'string' && url.trim() ? url.trim() : DEFAULT_API_BASE;
+  return resolved.replace(/\/$/, '');
 };
+
+/** Resolve product image URL: use as-is if absolute, else prepend API base (for paths like /uploads/products/...). In dev we use relative path so Vite proxy serves images same-origin and avoids CORP block. */
+export function getProductImageUrl(image: string | undefined): string {
+  if (!image) return '';
+  if (image.startsWith('http://') || image.startsWith('https://')) return image;
+  if (image.startsWith('/') && import.meta.env.DEV) {
+    return image;
+  }
+  const base = getApiBaseUrl();
+  const origin = base || DEFAULT_API_BASE;
+  return image.startsWith('/') ? origin + image : origin + '/' + image;
+}
 
 export class ApiError extends Error {
   constructor(

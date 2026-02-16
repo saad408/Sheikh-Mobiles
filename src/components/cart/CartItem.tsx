@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Minus, Plus, Trash2 } from 'lucide-react';
+import { getProductImageUrl } from '@/lib/api';
 import { CartItem as CartItemType, useCartStore } from '@/store/cartStore';
 
 interface CartItemProps {
@@ -19,7 +20,7 @@ export const CartItem = ({ item }: CartItemProps) => {
     >
       <div className="w-20 h-20 bg-gradient-to-br from-muted to-secondary rounded-xl overflow-hidden flex-shrink-0 p-2">
         <img
-          src={item.image}
+          src={getProductImageUrl(item.image)}
           alt={item.name}
           className="w-full h-full object-contain"
         />

@@ -6,6 +6,8 @@ import { useAuthStore } from '@/store/authStore';
 import { fetchProductById } from '@/api/products';
 import { updateProduct } from '@/api/admin-products';
 import { getCategories } from '@/api/categories';
+import { uploadProductImage, validateProductImageFile } from '@/api/upload';
+import { getProductImageUrl } from '@/lib/api';
 import type { ProductUpdateInput, ProductColor } from '@/types/admin';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -31,6 +33,9 @@ export default function AdminProductEdit() {
   const [form, setForm] = useState<ProductUpdateInput>({});
   const [colorRows, setColorRows] = useState<ProductColor[]>([emptyColor()]);
   const [sizesText, setSizesText] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [previewImageError, setPreviewImageError] = useState(false);
 
   const { data: product, isLoading, isError } = useQuery({
     queryKey: ['product', id],
@@ -65,6 +70,7 @@ export default function AdminProductEdit() {
         sizes: product.sizes,
         specs: product.specs,
       });
+      setPreviewImageError(false);
       setColorRows(
         product.colors?.length ? product.colors.map((c) => ({ name: c.name, hex: c.hex ?? '' })) : [emptyColor()]
       );
@@ -93,6 +99,28 @@ export default function AdminProductEdit() {
   const addColor = () => setColorRows((prev) => [...prev, emptyColor()]);
   const removeColor = (index: number) =>
     setColorRows((prev) => prev.filter((_, i) => i !== index));
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadError('');
+    const validation = validateProductImageFile(file);
+    if (validation) {
+      setUploadError(validation);
+      return;
+    }
+    setUploading(true);
+    try {
+      const { url } = await uploadProductImage(token, file);
+      setForm((f) => ({ ...f, image: url }));
+      toast.success('Image uploaded');
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,14 +224,64 @@ export default function AdminProductEdit() {
               </div>
             </div>
             <div>
-              <Label htmlFor="image" className="text-muted-foreground">Image URL</Label>
-              <input
-                id="image"
-                value={form.image ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
-                required
-                className="input-field mt-1.5"
-              />
+              <Label className="text-muted-foreground">Image</Label>
+              {form.image ? (
+                <div className="mt-1.5 flex items-start gap-4">
+                  <div className="w-24 h-24 rounded-xl border border-border bg-muted overflow-hidden flex items-center justify-center shrink-0">
+                    {previewImageError ? (
+                      <span className="text-xs text-muted-foreground text-center px-2">Image not found</span>
+                    ) : (
+                      <img
+                        src={getProductImageUrl(form.image)}
+                        alt="Preview"
+                        className="w-full h-full object-contain"
+                        onLoad={() => setPreviewImageError(false)}
+                        onError={() => setPreviewImageError(true)}
+                      />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <input
+                      id="image"
+                      value={form.image ?? ''}
+                      onChange={(e) => {
+                        setForm((f) => ({ ...f, image: e.target.value }));
+                        setPreviewImageError(false);
+                      }}
+                      placeholder="/uploads/products/..."
+                      required
+                      className="input-field w-full"
+                    />
+                    <p className="text-xs text-muted-foreground">Or upload a new image below to replace.</p>
+                  </div>
+                </div>
+              ) : (
+                <input
+                  id="image"
+                  value={form.image ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
+                  placeholder="Upload image or paste URL"
+                  required
+                  className="input-field mt-1.5"
+                />
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="sr-only"
+                    disabled={uploading}
+                    onChange={handleImageFileChange}
+                  />
+                  <span className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium bg-secondary text-secondary-foreground hover:bg-muted border border-border">
+                    {uploading ? 'Uploading...' : 'Upload image (max 5MB)'}
+                  </span>
+                </label>
+              </div>
+              {uploadError && (
+                <p className="mt-1.5 text-sm text-destructive">{uploadError}</p>
+              )}
             </div>
             <div>
               <Label htmlFor="description" className="text-muted-foreground">Description</Label>
