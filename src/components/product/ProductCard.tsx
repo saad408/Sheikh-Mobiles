@@ -37,7 +37,7 @@ export const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
               {product.name}
             </h3>
             <p className="text-base font-bold">
-              ${product.price.toLocaleString()}
+              Rs. {product.price.toLocaleString()}
             </p>
           </div>
         </div>

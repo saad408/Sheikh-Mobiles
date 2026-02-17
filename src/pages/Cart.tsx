@@ -1,13 +1,18 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { ShoppingBag, ArrowRight, Sparkles } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { CartItem } from '@/components/cart/CartItem';
-import { useCartStore } from '@/store/cartStore';
+import { useCartStore, getCartLineId } from '@/store/cartStore';
+import { validateCheckout } from '@/api/checkout';
+import { toast } from 'sonner';
 
 const Cart = () => {
+  const navigate = useNavigate();
   const { items, getTotalPrice, getTotalItems } = useCartStore();
+  const [checkingOut, setCheckingOut] = useState(false);
   const totalPrice = getTotalPrice();
   const totalItems = getTotalItems();
 
@@ -46,25 +51,9 @@ const Cart = () => {
 
             <AnimatePresence>
               {items.map((item) => (
-                <CartItem key={`${item.id}-${item.selectedColor}`} item={item} />
+                <CartItem key={getCartLineId(item)} item={item} />
               ))}
             </AnimatePresence>
-
-            {/* Promo Code */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="mt-6 flex gap-2"
-            >
-              <input
-                type="text"
-                placeholder="Promo code"
-                className="input-field flex-1"
-              />
-              <button className="btn-secondary px-5">
-                Apply
-              </button>
-            </motion.div>
 
             {/* Order Summary */}
             <motion.div
@@ -76,21 +65,21 @@ const Cart = () => {
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-medium">${totalPrice.toLocaleString()}</span>
+                  <span className="font-medium">Rs. {totalPrice.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Shipping</span>
-                  <span className="font-medium">{shipping === 0 ? 'Free' : `$${shipping}`}</span>
+                  <span className="font-medium">{shipping === 0 ? 'Free' : `Rs. ${shipping}`}</span>
                 </div>
                 {shipping > 0 && (
                   <div className="flex items-center gap-2 text-xs text-primary">
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Free shipping on orders over $500</span>
+                    <span>Free shipping on orders over Rs. 500</span>
                   </div>
                 )}
                 <div className="border-t border-border pt-3 flex justify-between">
                   <span className="font-display font-bold">Total</span>
-                  <span className="font-display text-lg font-bold">${total.toLocaleString()}</span>
+                  <span className="font-display text-lg font-bold">Rs. {total.toLocaleString()}</span>
                 </div>
               </div>
             </motion.div>
@@ -102,15 +91,48 @@ const Cart = () => {
       {items.length > 0 && (
         <div className="fixed bottom-20 left-0 right-0 glass-card border-t border-border/50 p-4 z-30">
           <div className="container-mobile">
-            <Link to="/checkout">
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                className="w-full btn-accent flex items-center justify-center gap-2"
-              >
-                Proceed to Checkout
-                <ArrowRight className="w-4 h-4" />
-              </motion.button>
-            </Link>
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              disabled={checkingOut}
+              onClick={async () => {
+                setCheckingOut(true);
+                try {
+                  const result = await validateCheckout(
+                    items.map((i) => ({
+                      id: i.id,
+                      quantity: i.quantity,
+                      price: i.price,
+                      selectedColor: i.selectedColor ?? '',
+                      selectedSize: i.selectedSize ?? '',
+                    }))
+                  );
+                  if (result.valid) {
+                    navigate('/checkout');
+                  } else {
+                    (result.errors || ['Please fix cart issues before checkout.']).forEach((msg) =>
+                      toast.error(msg)
+                    );
+                  }
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Validation failed');
+                } finally {
+                  setCheckingOut(false);
+                }
+              }}
+              className="w-full btn-accent flex items-center justify-center gap-2 disabled:opacity-70"
+            >
+              {checkingOut ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                <>
+                  Proceed to Checkout
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </motion.button>
           </div>
         </div>
       )}

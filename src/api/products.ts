@@ -1,5 +1,5 @@
 import { get } from '@/lib/api';
-import type { Product, ProductColor, ProductSpecs } from '@/store/cartStore';
+import type { Product, ProductColor, ProductSpecs, StockByColorItem, StockByVariationItem, VariationByColorItem } from '@/store/cartStore';
 
 const DEFAULT_SPECS: ProductSpecs = {
   processor: '',
@@ -30,11 +30,79 @@ function normalizeSpecs(specs: unknown): ProductSpecs {
   };
 }
 
+function normalizeStockByColor(stock: unknown): StockByColorItem[] {
+  if (!Array.isArray(stock)) return [];
+  return stock
+    .filter((s) => s && typeof s === 'object' && 'color' in s && 'quantity' in s)
+    .map((s) => ({
+      color: typeof (s as StockByColorItem).color === 'string' ? (s as StockByColorItem).color : '',
+      quantity: typeof (s as StockByColorItem).quantity === 'number' ? (s as StockByColorItem).quantity : 0,
+    }));
+}
+
+function normalizeStockByVariation(stock: unknown): StockByVariationItem[] {
+  if (!Array.isArray(stock)) return [];
+  return stock
+    .filter((s) => s && typeof s === 'object' && 'color' in s && 'storage' in s && 'quantity' in s)
+    .map((s) => ({
+      color: typeof (s as StockByVariationItem).color === 'string' ? (s as StockByVariationItem).color : '',
+      storage: typeof (s as StockByVariationItem).storage === 'string' ? (s as StockByVariationItem).storage : '',
+      quantity: typeof (s as StockByVariationItem).quantity === 'number' ? (s as StockByVariationItem).quantity : 0,
+    }));
+}
+
+function normalizeSizes(sizes: unknown): string[] {
+  if (!Array.isArray(sizes)) return [];
+  return sizes.map((s) => (typeof s === 'string' ? s : String(s))).filter(Boolean);
+}
+
+function normalizeVariationByColorItem(v: unknown): VariationByColorItem | null {
+  if (!v || typeof v !== 'object' || !('storage' in v) || !('quantity' in v)) return null;
+  const s = v as { storage: unknown; quantity: unknown };
+  return {
+    storage: typeof s.storage === 'string' ? s.storage : '',
+    quantity: typeof s.quantity === 'number' ? s.quantity : 0,
+  };
+}
+
+function normalizeVariationsByColor(
+  variations: unknown,
+  stockByVariation: StockByVariationItem[]
+): Record<string, VariationByColorItem[]> {
+  if (variations && typeof variations === 'object' && !Array.isArray(variations)) {
+    const record = variations as Record<string, unknown>;
+    const out: Record<string, VariationByColorItem[]> = {};
+    for (const key of Object.keys(record)) {
+      const arr = record[key];
+      if (!Array.isArray(arr)) continue;
+      const list = arr.map(normalizeVariationByColorItem).filter((x): x is VariationByColorItem => x != null);
+      if (list.length) out[key] = list;
+    }
+    if (Object.keys(out).length > 0) return out;
+  }
+  if (stockByVariation.length > 0) {
+    const byColor: Record<string, VariationByColorItem[]> = {};
+    for (const v of stockByVariation) {
+      const color = v.color ?? '';
+      if (!byColor[color]) byColor[color] = [];
+      byColor[color].push({ storage: v.storage, quantity: v.quantity });
+    }
+    return byColor;
+  }
+  return {};
+}
+
 function normalizeProduct(raw: Product): Product {
+  const stockByVariation = normalizeStockByVariation(raw.stockByVariation);
+  const variationsByColor = normalizeVariationsByColor(raw.variationsByColor, stockByVariation);
   return {
     ...raw,
     colors: normalizeColors(raw.colors),
     specs: normalizeSpecs(raw.specs),
+    sizes: normalizeSizes(raw.sizes),
+    stockByColor: normalizeStockByColor(raw.stockByColor),
+    stockByVariation,
+    variationsByColor: Object.keys(variationsByColor).length > 0 ? variationsByColor : undefined,
   };
 }
 

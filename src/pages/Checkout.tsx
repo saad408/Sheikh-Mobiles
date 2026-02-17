@@ -1,10 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, CreditCard, Truck, Lock, ChevronRight, Package } from 'lucide-react';
+import { Check, CreditCard, Truck, Lock, ChevronRight, Package, AlertCircle } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { useCartStore } from '@/store/cartStore';
+import { validateCheckout } from '@/api/checkout';
+import { createOrder } from '@/api/orders';
+import type { CheckoutValidateResponse } from '@/api/checkout';
 import { toast } from 'sonner';
 
 type Step = 'shipping' | 'payment' | 'confirmation';
@@ -15,7 +18,13 @@ const Checkout = () => {
   const { items, getTotalPrice, clearCart } = useCartStore();
   const [step, setStep] = useState<Step>('shipping');
   const [isProcessing, setIsProcessing] = useState(false);
-  
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [validation, setValidation] = useState<{
+    result: CheckoutValidateResponse | null;
+    loading: boolean;
+    error: string | null;
+  }>({ result: null, loading: false, error: null });
+
   const [shippingInfo, setShippingInfo] = useState({
     firstName: '',
     lastName: '',
@@ -34,10 +43,51 @@ const Checkout = () => {
     name: '',
   });
 
+  useEffect(() => {
+    if (items.length === 0) return;
+    setValidation((v) => ({ ...v, loading: true, error: null }));
+    validateCheckout(
+      items.map((i) => ({
+        id: i.id,
+        quantity: i.quantity,
+        price: i.price,
+        selectedColor: i.selectedColor ?? '',
+        selectedSize: i.selectedSize ?? '',
+      }))
+    )
+      .then((result) => {
+        setValidation({ result, loading: false, error: null });
+      })
+      .catch((err) => {
+        setValidation({
+          result: null,
+          loading: false,
+          error: err instanceof Error ? err.message : 'Validation failed',
+        });
+      });
+  }, [items]);
+
+  useEffect(() => {
+    if (validation.loading || !validation.result) return;
+    if (!validation.result.valid) {
+      const messages = validation.result.errors?.length
+        ? validation.result.errors
+        : ['Please fix cart issues before checkout.'];
+      messages.forEach((msg) => toast.error(msg));
+      navigate('/cart', { replace: true });
+    }
+  }, [validation.loading, validation.result, navigate]);
+
+  const validResult = validation.result?.valid ? validation.result : null;
   const totalPrice = getTotalPrice();
-  const shipping = totalPrice > 500 ? 0 : 15;
-  const tax = Math.round(totalPrice * 0.08);
-  const total = totalPrice + shipping + tax;
+  const shippingClient = totalPrice > 500 ? 0 : 15;
+  const taxClient = Math.round(totalPrice * 0.08);
+  const totalClient = totalPrice + shippingClient + taxClient;
+
+  const subtotal = validResult?.subtotal ?? totalPrice;
+  const shipping = validResult?.shippingCost ?? shippingClient;
+  const tax = validResult?.tax ?? taxClient;
+  const total = validResult?.total ?? totalClient;
 
   const handleShippingSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,13 +97,35 @@ const Checkout = () => {
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
-    
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    setIsProcessing(false);
-    setStep('confirmation');
-    clearCart();
-    toast.success('Order placed successfully!');
+    try {
+      const orderItems = items.map((item, index) => {
+        const validated = validation.result?.validatedItems?.[index];
+        const price = validated?.currentPrice ?? item.price;
+        return {
+          id: item.id,
+          quantity: item.quantity,
+          price,
+          selectedColor: item.selectedColor ?? '',
+          selectedSize: item.selectedSize ?? '',
+        };
+      });
+      const res = await createOrder({
+        items: orderItems,
+        subtotal,
+        shippingCost: shipping,
+        tax,
+        total,
+        shipping: shippingInfo,
+      });
+      setOrderId(res.orderId ?? null);
+      clearCart();
+      setStep('confirmation');
+      toast.success('Order placed successfully!');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Order failed');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (items.length === 0 && step !== 'confirmation') {
@@ -61,11 +133,48 @@ const Checkout = () => {
     return null;
   }
 
+  if (!validation.loading && validation.result && !validation.result.valid) {
+    return (
+      <div className="page-transition flex items-center justify-center min-h-[60vh]">
+        <div className="text-center text-muted-foreground">
+          <p className="font-medium">Cart has issues. Redirecting to cart...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page-transition">
       <Header title="Checkout" showBack />
 
       <div className="container-mobile pt-4 pb-32">
+        {validation.loading && (
+          <div className="mb-4 py-3 px-4 rounded-xl bg-muted text-muted-foreground text-sm text-center">
+            Verifying cart...
+          </div>
+        )}
+        {validation.result && !validation.result.valid && validation.result.errors?.length && (
+          <div className="mb-4 p-4 rounded-xl bg-destructive/10 border border-destructive/30">
+            <div className="flex items-center gap-2 text-destructive font-semibold mb-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              Cart issues
+            </div>
+            <ul className="text-sm text-destructive list-disc list-inside space-y-1">
+              {validation.result.errors.map((msg, i) => (
+                <li key={i}>{msg}</li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground mt-2">
+              Update quantities or remove items, then we&apos;ll re-check.
+            </p>
+          </div>
+        )}
+        {validation.error && (
+          <div className="mb-4 py-3 px-4 rounded-xl bg-destructive/10 text-destructive text-sm">
+            {validation.error}
+          </div>
+        )}
+
         {/* Progress Steps */}
         <div className="flex items-center justify-center gap-2 mb-8">
           {steps.map((s, i) => (
@@ -301,19 +410,19 @@ const Checkout = () => {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-medium">${totalPrice.toLocaleString()}</span>
+                    <span className="font-medium">Rs. {totalPrice.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Shipping</span>
-                    <span className="font-medium">{shipping === 0 ? 'Free' : `$${shipping}`}</span>
+                    <span className="font-medium">{shipping === 0 ? 'Free' : `Rs. ${shipping}`}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Tax</span>
-                    <span className="font-medium">${tax}</span>
+                    <span className="font-medium">Rs. {tax}</span>
                   </div>
                   <div className="border-t border-border pt-2 flex justify-between">
                     <span className="font-display font-bold">Total</span>
-                    <span className="font-display text-lg font-bold">${total.toLocaleString()}</span>
+                    <span className="font-display text-lg font-bold">Rs. {total.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -332,7 +441,7 @@ const Checkout = () => {
                 ) : (
                   <>
                     <Lock className="w-4 h-4" />
-                    Pay ${total.toLocaleString()}
+                    Pay Rs. {total.toLocaleString()}
                   </>
                 )}
               </motion.button>
@@ -361,7 +470,7 @@ const Checkout = () => {
                 We've sent a confirmation to {shippingInfo.email || 'your email'}
               </p>
               <p className="text-sm font-mono bg-secondary px-4 py-2 rounded-lg inline-block mb-8">
-                Order #{Date.now().toString().slice(-8)}
+                Order #{orderId || Date.now().toString().slice(-8)}
               </p>
               <motion.button
                 whileTap={{ scale: 0.98 }}

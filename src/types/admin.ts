@@ -40,6 +40,17 @@ export interface ProductColor {
   hex: string;
 }
 
+export interface StockByColorItem {
+  color: string;
+  quantity: number;
+}
+
+export interface StockByVariationItem {
+  color: string;
+  storage: string;
+  quantity: number;
+}
+
 export interface ProductCreateInput {
   id: string;
   name: string;
@@ -50,6 +61,8 @@ export interface ProductCreateInput {
   colors?: ProductColor[];
   sizes?: string[];
   specs?: Partial<ProductSpecs>;
+  stockByColor?: StockByColorItem[];
+  stockByVariation?: StockByVariationItem[];
 }
 
 export interface ProductUpdateInput {
@@ -61,6 +74,8 @@ export interface ProductUpdateInput {
   colors?: ProductColor[];
   sizes?: string[];
   specs?: Partial<ProductSpecs>;
+  stockByColor?: StockByColorItem[];
+  stockByVariation?: StockByVariationItem[];
 }
 
 export interface ApiErrorResponse {

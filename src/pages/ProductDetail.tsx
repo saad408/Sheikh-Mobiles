@@ -6,6 +6,7 @@ import { Check, ShoppingBag, Star, Cpu, Camera, Battery, Smartphone } from 'luci
 import { Header } from '@/components/layout/Header';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { ColorSelector } from '@/components/ui/ColorSelector';
+import { SizeSelector } from '@/components/ui/SizeSelector';
 import { QuantitySelector } from '@/components/ui/QuantitySelector';
 import { fetchProductById } from '@/api/products';
 import { getProductImageUrl } from '@/lib/api';
@@ -30,6 +31,7 @@ const DEFAULT_SPECS: ProductSpecs = {
 const ProductDetail = () => {
   const { id } = useParams<{ id: string }>();
   const addItem = useCartStore((state) => state.addItem);
+  const cartItems = useCartStore((state) => state.items);
 
   const { data: product, isLoading, isError } = useQuery({
     queryKey: ['product', id],
@@ -38,16 +40,75 @@ const ProductDetail = () => {
   });
 
   const [selectedColor, setSelectedColor] = useState<string | undefined>();
+  const [selectedSize, setSelectedSize] = useState<string | undefined>();
   const [quantity, setQuantity] = useState(1);
   const [isAdded, setIsAdded] = useState(false);
   const [imageError, setImageError] = useState(false);
+
+  const variationsByColor = product?.variationsByColor ?? {};
+  const hasPerColorStorage = Object.values(variationsByColor).some((arr) => arr.length > 0);
+  const storageOptionsForColor =
+    (selectedColor != null ? variationsByColor[selectedColor] : variationsByColor['']) ?? [];
+  const storageOptionStrings = hasPerColorStorage
+    ? storageOptionsForColor.map((v) => v.storage)
+    : product?.sizes ?? [];
 
   useEffect(() => {
     if (product?.colors?.length) setSelectedColor(product.colors[0].name);
   }, [product]);
   useEffect(() => {
+    if (!product) return;
+    if (hasPerColorStorage) {
+      const list =
+        selectedColor != null
+          ? variationsByColor[selectedColor] ?? []
+          : variationsByColor[''] ?? [];
+      setSelectedSize((current) => {
+        if (list.length === 0) return undefined;
+        const valid = list.some((v) => v.storage === current);
+        return valid ? current : list[0].storage;
+      });
+    } else if (product.sizes?.length) {
+      setSelectedSize((current) =>
+        product.sizes!.includes(current ?? '') ? current : product.sizes![0]
+      );
+    } else {
+      setSelectedSize(undefined);
+    }
+  }, [product, selectedColor, hasPerColorStorage, variationsByColor]);
+  useEffect(() => {
     setImageError(false);
   }, [product?.image]);
+
+  const stockByColor = product?.stockByColor ?? [];
+  const stockByVariation = product?.stockByVariation ?? [];
+  const selectedStock = product
+    ? (() => {
+        if (storageOptionsForColor.length > 0 && selectedSize != null) {
+          const v = storageOptionsForColor.find((s) => s.storage === selectedSize);
+          if (v != null) return v.quantity;
+        }
+        if (stockByVariation.length > 0 && selectedSize != null) {
+          const v = stockByVariation.find(
+            (s) => s.color === (selectedColor ?? '') && s.storage === selectedSize
+          );
+          if (v != null) return v.quantity;
+        }
+        if (selectedColor != null) {
+          return stockByColor.find((s) => s.color === selectedColor)?.quantity;
+        }
+        if (!product.colors?.length) {
+          return stockByColor.find((s) => s.color === '')?.quantity ?? stockByColor[0]?.quantity;
+        }
+        return undefined;
+      })()
+    : undefined;
+  const maxQuantity = selectedStock != null ? Math.max(1, selectedStock) : undefined;
+  const hasStorage = hasPerColorStorage || (product?.sizes?.length ?? 0) > 0;
+
+  useEffect(() => {
+    if (maxQuantity != null && quantity > maxQuantity) setQuantity(maxQuantity);
+  }, [maxQuantity, quantity]);
 
   if (!id) {
     return (
@@ -85,14 +146,30 @@ const ProductDetail = () => {
   }
 
   const handleAddToCart = () => {
-    addItem(product, quantity, undefined, selectedColor);
+    const size = hasStorage ? selectedSize : undefined;
+    const alreadyInCart = cartItems.some(
+      (i) =>
+        i.id === product.id &&
+        (i.selectedColor ?? '') === (selectedColor ?? '') &&
+        (i.selectedSize ?? '') === (size ?? '')
+    );
+    if (alreadyInCart) {
+      toast.info('This item is already in your cart', {
+        description: 'Update quantity in the cart if needed.',
+      });
+      return;
+    }
+    const qty = maxQuantity != null ? Math.min(quantity, maxQuantity) : quantity;
+    if (selectedStock === 0) return;
+    addItem(product, qty, size, selectedColor);
     setIsAdded(true);
     toast.success('Added to cart', {
-      description: `${product.name} × ${quantity}`,
+      description: `${product.name} × ${qty}`,
     });
     setTimeout(() => setIsAdded(false), 2000);
   };
-console.log(getProductImageUrl(product.image));
+
+  const outOfStock = selectedStock === 0;
   return (
     <div className="page-transition">
       <Header showBack transparent actions={['share']} />
@@ -142,7 +219,7 @@ console.log(getProductImageUrl(product.image));
               {product.name}
             </h1>
             <p className="text-2xl lg:text-3xl font-bold gradient-text mb-4">
-              ${product.price.toLocaleString()}
+              Rs. {product.price.toLocaleString()}
             </p>
             <p className="text-muted-foreground leading-relaxed mb-6">
               {product.description}
@@ -189,6 +266,30 @@ console.log(getProductImageUrl(product.image));
             </motion.div>
           )}
 
+          {/* Storage Selection (per-color when variationsByColor present) */}
+          {storageOptionStrings.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              className="mb-6"
+            >
+              <h3 className="font-display font-semibold mb-3">Storage</h3>
+              <SizeSelector
+                sizes={storageOptionStrings}
+                selected={selectedSize}
+                onChange={setSelectedSize}
+              />
+            </motion.div>
+          )}
+
+          {/* Stock message (after color/storage so selection is known) */}
+          {(product.colors?.length || storageOptionStrings.length > 0) && selectedStock != null && (
+            <p className="text-sm text-muted-foreground mb-4">
+              {selectedStock > 0 ? `${selectedStock} in stock` : 'Out of stock'}
+            </p>
+          )}
+
           {/* Quantity */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -197,7 +298,15 @@ console.log(getProductImageUrl(product.image));
             className="mb-8"
           >
             <h3 className="font-display font-semibold mb-3">Quantity</h3>
-            <QuantitySelector quantity={quantity} onChange={setQuantity} />
+            <QuantitySelector
+              quantity={quantity}
+              onChange={setQuantity}
+              min={1}
+              max={maxQuantity ?? 99}
+            />
+            {selectedStock == null && !product.stockByColor?.length && !product.stockByVariation?.length && !hasPerColorStorage && (
+              <p className="text-sm text-muted-foreground mt-2">Stock not specified</p>
+            )}
           </motion.div>
 
           {/* Desktop CTA */}
@@ -210,16 +319,19 @@ console.log(getProductImageUrl(product.image));
             <div className="flex-1">
               <p className="text-xs text-muted-foreground">Total</p>
               <p className="text-xl font-bold">
-                ${(product.price * quantity).toLocaleString()}
+                Rs. {(product.price * quantity).toLocaleString()}
               </p>
             </div>
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={handleAddToCart}
-              className={`flex-1 py-4 px-6 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all duration-300 ${
+              disabled={outOfStock}
+              className={`flex-1 py-4 px-6 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
                 isAdded
                   ? 'bg-accent text-accent-foreground'
-                  : 'gradient-primary text-primary-foreground shadow-glow hover:shadow-elevated'
+                  : outOfStock
+                    ? 'bg-muted text-muted-foreground'
+                    : 'gradient-primary text-primary-foreground shadow-glow hover:shadow-elevated'
               }`}
             >
               <AnimatePresence mode="wait">
@@ -243,7 +355,7 @@ console.log(getProductImageUrl(product.image));
                     className="flex items-center gap-2"
                   >
                     <ShoppingBag className="w-5 h-5" />
-                    Add to Cart
+                    {outOfStock ? 'Out of stock' : 'Add to Cart'}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -258,16 +370,19 @@ console.log(getProductImageUrl(product.image));
           <div className="flex-1">
             <p className="text-xs text-muted-foreground">Total</p>
             <p className="text-xl font-bold">
-              ${(product.price * quantity).toLocaleString()}
+              Rs. {(product.price * quantity).toLocaleString()}
             </p>
           </div>
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={handleAddToCart}
-            className={`flex-1 py-4 px-6 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all duration-300 ${
+            disabled={outOfStock}
+            className={`flex-1 py-4 px-6 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
               isAdded
                 ? 'bg-accent text-accent-foreground'
-                : 'gradient-primary text-primary-foreground shadow-glow hover:shadow-elevated'
+                : outOfStock
+                  ? 'bg-muted text-muted-foreground'
+                  : 'gradient-primary text-primary-foreground shadow-glow hover:shadow-elevated'
             }`}
           >
             <AnimatePresence mode="wait">
@@ -291,7 +406,7 @@ console.log(getProductImageUrl(product.image));
                   className="flex items-center gap-2"
                 >
                   <ShoppingBag className="w-5 h-5" />
-                  Add to Cart
+                  {outOfStock ? 'Out of stock' : 'Add to Cart'}
                 </motion.div>
               )}
             </AnimatePresence>

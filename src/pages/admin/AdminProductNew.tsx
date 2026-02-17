@@ -7,7 +7,8 @@ import { createProduct } from '@/api/admin-products';
 import { getCategories } from '@/api/categories';
 import { uploadProductImage, validateProductImageFile } from '@/api/upload';
 import { getProductImageUrl } from '@/lib/api';
-import type { ProductCreateInput, ProductColor } from '@/types/admin';
+import type { ProductCreateInput, ProductColor, StockByVariationItem } from '@/types/admin';
+import { STORAGE_OPTIONS } from '@/constants/storageOptions';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { ColorPickerRow } from '@/components/admin/ColorPickerRow';
@@ -39,7 +40,11 @@ export default function AdminProductNew() {
     specs: { processor: '', camera: '', battery: '', display: '' },
   });
   const [colorRows, setColorRows] = useState<ProductColor[]>([emptyColor()]);
+  const [variationRows, setVariationRows] = useState<StockByVariationItem[]>([
+    { color: '', storage: STORAGE_OPTIONS[0], quantity: 0 },
+  ]);
   const [sizesText, setSizesText] = useState('');
+  const colorOptions = useMemo(() => colorRows.map((c) => c.name.trim()).filter(Boolean), [colorRows]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [previewImageError, setPreviewImageError] = useState(false);
@@ -72,6 +77,18 @@ export default function AdminProductNew() {
   const removeColor = (index: number) =>
     setColorRows((prev) => prev.filter((_, i) => i !== index));
 
+  const updateVariationRow = (index: number, color: string, storage: string, quantity: number) => {
+    setVariationRows((prev) => {
+      const next = [...prev];
+      next[index] = { color, storage, quantity };
+      return next;
+    });
+  };
+  const addVariationRow = () =>
+    setVariationRows((prev) => [...prev, { color: colorOptions[0] ?? '', storage: STORAGE_OPTIONS[0], quantity: 0 }]);
+  const removeVariationRow = (index: number) =>
+    setVariationRows((prev) => prev.filter((_, i) => i !== index));
+
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -97,15 +114,36 @@ export default function AdminProductNew() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
     const colors = colorRows.map((c) => ({ name: c.name.trim(), hex: (c.hex || '').trim() })).filter((c) => c.name);
+    const filledRows = variationRows.filter((r) => r.color.trim() && r.storage.trim());
+    const key = (r: StockByVariationItem) => `${r.color.trim()}|${r.storage.trim()}`;
+    const seen = new Set<string>();
+    const duplicate = filledRows.find((r) => {
+      const k = key(r);
+      if (seen.has(k)) return true;
+      seen.add(k);
+      return false;
+    });
+    if (duplicate) {
+      setError(`Duplicate variation: "${duplicate.color}" + "${duplicate.storage}" appears more than once. Each color and storage combination must be unique.`);
+      return;
+    }
+    setLoading(true);
     try {
+      const stockByVariation = variationRows
+        .map((r) => ({
+          color: r.color.trim(),
+          storage: r.storage.trim(),
+          quantity: Math.max(0, Number(r.quantity) || 0),
+        }))
+        .filter((r) => r.quantity > 0 || r.color !== '' || r.storage !== '');
       await createProduct(token, {
         ...form,
         price: Number(form.price) || 0,
         colors: colors.length ? colors : undefined,
         sizes: parseList(sizesText),
         specs: form.specs,
+        stockByVariation: stockByVariation.length ? stockByVariation : undefined,
       });
       toast.success('Product created');
       navigate('/admin/products');
@@ -148,7 +186,7 @@ export default function AdminProductNew() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="price" className="text-muted-foreground">Price ($)</Label>
+                <Label htmlFor="price" className="text-muted-foreground">Price (Rs.)</Label>
                 <input
                   id="price"
                   type="number"
@@ -317,6 +355,66 @@ export default function AdminProductNew() {
               <Plus className="w-4 h-4 mr-2" />
               Add color
             </Button>
+            </div>
+          </div>
+
+          <div>
+            <h2 className="font-display text-lg font-semibold text-foreground mb-4">Stock by variation</h2>
+            <p className="text-sm text-muted-foreground mb-4">Per color + storage. Choose a color from the list above and set storage size and quantity for each variant.</p>
+            <div className="space-y-3">
+              {variationRows.map((row, index) => (
+                <div key={index} className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={row.color}
+                    onChange={(e) => updateVariationRow(index, e.target.value, row.storage, row.quantity)}
+                    className="input-field w-40 min-w-0 rounded-xl"
+                  >
+                    <option value="">Select color</option>
+                    {colorOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={STORAGE_OPTIONS.includes(row.storage as (typeof STORAGE_OPTIONS)[number]) ? row.storage : ''}
+                    onChange={(e) => updateVariationRow(index, row.color, e.target.value, row.quantity)}
+                    className="input-field w-28 min-w-0 rounded-xl"
+                  >
+                    <option value="">Storage</option>
+                    {STORAGE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={0}
+                    value={row.quantity}
+                    onChange={(e) => updateVariationRow(index, row.color, row.storage, Number(e.target.value) || 0)}
+                    placeholder="Qty"
+                    className="input-field w-24"
+                  />
+                  <Button type="button" variant="ghost" size="sm" className="rounded-lg text-destructive hover:text-destructive" onClick={() => removeVariationRow(index)} disabled={variationRows.length <= 1}>
+                    Remove
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                onClick={addVariationRow}
+                disabled={colorOptions.length === 0}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add variation row
+              </Button>
+              {colorOptions.length === 0 && (
+                <p className="text-sm text-muted-foreground">Add at least one color above to add variations.</p>
+              )}
             </div>
           </div>
 

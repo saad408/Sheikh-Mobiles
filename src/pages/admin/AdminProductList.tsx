@@ -109,7 +109,7 @@ export default function AdminProductList() {
                     </TableCell>
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell className="text-muted-foreground">{p.category}</TableCell>
-                    <TableCell className="text-right">${p.price.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">Rs. {p.price.toLocaleString()}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="icon" asChild className="rounded-lg">

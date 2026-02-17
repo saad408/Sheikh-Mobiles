@@ -13,6 +13,23 @@ export interface ProductColor {
   hex: string;
 }
 
+export interface StockByColorItem {
+  color: string;
+  quantity: number;
+}
+
+export interface StockByVariationItem {
+  color: string;
+  storage: string;
+  quantity: number;
+}
+
+/** Per-color storage options and quantity. Key = color name. */
+export interface VariationByColorItem {
+  storage: string;
+  quantity: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -23,6 +40,10 @@ export interface Product {
   sizes?: string[];
   colors?: ProductColor[];
   specs?: ProductSpecs;
+  stockByColor?: StockByColorItem[];
+  stockByVariation?: StockByVariationItem[];
+  /** Storage options per color. Prefer this for storage selector when present. */
+  variationsByColor?: Record<string, VariationByColorItem[]>;
 }
 
 export interface CartItem extends Product {
@@ -31,11 +52,16 @@ export interface CartItem extends Product {
   selectedColor?: string;
 }
 
+/** Unique key per cart line (same product + color + size = same line). */
+export function getCartLineId(item: CartItem): string {
+  return `${item.id}|${item.selectedColor ?? ''}|${item.selectedSize ?? ''}`;
+}
+
 interface CartStore {
   items: CartItem[];
   addItem: (product: Product, quantity?: number, size?: string, color?: string) => void;
-  removeItem: (id: string) => void;
-  updateQuantity: (id: string, quantity: number) => void;
+  removeItem: (lineId: string) => void;
+  updateQuantity: (lineId: string, quantity: number) => void;
   clearCart: () => void;
   getTotalItems: () => number;
   getTotalPrice: () => number;
@@ -68,17 +94,19 @@ export const useCartStore = create<CartStore>()(
         });
       },
       
-      removeItem: (id) => {
+      removeItem: (lineId) => {
         set((state) => ({
-          items: state.items.filter((item) => item.id !== id),
+          items: state.items.filter((item) => getCartLineId(item) !== lineId),
         }));
       },
       
-      updateQuantity: (id, quantity) => {
+      updateQuantity: (lineId, quantity) => {
         set((state) => ({
-          items: state.items.map((item) =>
-            item.id === id ? { ...item, quantity: Math.max(0, quantity) } : item
-          ).filter((item) => item.quantity > 0),
+          items: state.items
+            .map((item) =>
+              getCartLineId(item) === lineId ? { ...item, quantity: Math.max(0, quantity) } : item
+            )
+            .filter((item) => item.quantity > 0),
         }));
       },
       
