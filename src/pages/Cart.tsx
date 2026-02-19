@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { ShoppingBag, ArrowRight, Sparkles } from 'lucide-react';
+import { ShoppingBag, ArrowRight } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { CartItem } from '@/components/cart/CartItem';
@@ -16,8 +16,9 @@ const Cart = () => {
   const totalPrice = getTotalPrice();
   const totalItems = getTotalItems();
 
-  const shipping = totalPrice > 500 ? 0 : 15;
-  const total = totalPrice + shipping;
+  const shipping = 1000;
+  const tax = 0;
+  const total = totalPrice + shipping + tax;
 
   return (
     <div className="page-transition">
@@ -69,14 +70,12 @@ const Cart = () => {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Shipping</span>
-                  <span className="font-medium">{shipping === 0 ? 'Free' : `Rs. ${shipping}`}</span>
+                  <span className="font-medium">Rs. {shipping.toLocaleString()}</span>
                 </div>
-                {shipping > 0 && (
-                  <div className="flex items-center gap-2 text-xs text-primary">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Free shipping on orders over Rs. 500</span>
-                  </div>
-                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Tax</span>
+                  <span className="font-medium">Rs. {tax.toLocaleString()}</span>
+                </div>
                 <div className="border-t border-border pt-3 flex justify-between">
                   <span className="font-display font-bold">Total</span>
                   <span className="font-display text-lg font-bold">Rs. {total.toLocaleString()}</span>

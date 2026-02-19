@@ -1,5 +1,5 @@
 import { get } from '@/lib/api';
-import type { Product, ProductColor, ProductSpecs, StockByColorItem, StockByVariationItem, VariationByColorItem } from '@/store/cartStore';
+import type { Product, ProductColor, ProductSpecs, StockByColorItem, StockByVariationItem, VariationByColorItem, PriceByVariationItem } from '@/store/cartStore';
 
 const DEFAULT_SPECS: ProductSpecs = {
   processor: '',
@@ -58,11 +58,25 @@ function normalizeSizes(sizes: unknown): string[] {
 
 function normalizeVariationByColorItem(v: unknown): VariationByColorItem | null {
   if (!v || typeof v !== 'object' || !('storage' in v) || !('quantity' in v)) return null;
-  const s = v as { storage: unknown; quantity: unknown };
-  return {
+  const s = v as { storage: unknown; quantity: unknown; price?: unknown };
+  const item: VariationByColorItem = {
     storage: typeof s.storage === 'string' ? s.storage : '',
     quantity: typeof s.quantity === 'number' ? s.quantity : 0,
   };
+  if (typeof s.price === 'number' && s.price >= 0) item.price = s.price;
+  return item;
+}
+
+function normalizePricesByVariation(arr: unknown): PriceByVariationItem[] {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .filter((s) => s && typeof s === 'object' && 'color' in s && 'storage' in s && 'price' in s)
+    .map((s) => ({
+      color: typeof (s as PriceByVariationItem).color === 'string' ? (s as PriceByVariationItem).color : '',
+      storage: typeof (s as PriceByVariationItem).storage === 'string' ? (s as PriceByVariationItem).storage : '',
+      price: typeof (s as PriceByVariationItem).price === 'number' ? (s as PriceByVariationItem).price : 0,
+    }))
+    .filter((x) => x.price > 0 || x.color !== '' || x.storage !== '');
 }
 
 function normalizeVariationsByColor(
@@ -92,9 +106,32 @@ function normalizeVariationsByColor(
   return {};
 }
 
+function mergePricesIntoVariationsByColor(
+  variationsByColor: Record<string, VariationByColorItem[]>,
+  pricesByVariation: PriceByVariationItem[]
+): Record<string, VariationByColorItem[]> {
+  if (pricesByVariation.length === 0) return variationsByColor;
+  const priceMap = new Map<string, number>();
+  for (const p of pricesByVariation) {
+    priceMap.set(`${p.color}|${p.storage}`, p.price);
+  }
+  const out: Record<string, VariationByColorItem[]> = {};
+  for (const [color, list] of Object.entries(variationsByColor)) {
+    out[color] = list.map((v) => {
+      const price = priceMap.get(`${color}|${v.storage}`);
+      return price != null ? { ...v, price } : v;
+    });
+  }
+  return out;
+}
+
 function normalizeProduct(raw: Product): Product {
   const stockByVariation = normalizeStockByVariation(raw.stockByVariation);
-  const variationsByColor = normalizeVariationsByColor(raw.variationsByColor, stockByVariation);
+  let variationsByColor = normalizeVariationsByColor(raw.variationsByColor, stockByVariation);
+  const pricesByVariation = normalizePricesByVariation((raw as { pricesByVariation?: unknown }).pricesByVariation);
+  if (pricesByVariation.length > 0 && Object.keys(variationsByColor).length > 0) {
+    variationsByColor = mergePricesIntoVariationsByColor(variationsByColor, pricesByVariation);
+  }
   return {
     ...raw,
     colors: normalizeColors(raw.colors),
@@ -103,6 +140,7 @@ function normalizeProduct(raw: Product): Product {
     stockByColor: normalizeStockByColor(raw.stockByColor),
     stockByVariation,
     variationsByColor: Object.keys(variationsByColor).length > 0 ? variationsByColor : undefined,
+    pricesByVariation: pricesByVariation.length > 0 ? pricesByVariation : undefined,
   };
 }
 

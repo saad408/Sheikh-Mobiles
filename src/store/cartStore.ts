@@ -24,10 +24,17 @@ export interface StockByVariationItem {
   quantity: number;
 }
 
-/** Per-color storage options and quantity. Key = color name. */
+/** Per-color storage options: storage, quantity, and price (PKR). Key = color name. */
 export interface VariationByColorItem {
   storage: string;
   quantity: number;
+  price?: number;
+}
+
+export interface PriceByVariationItem {
+  color: string;
+  storage: string;
+  price: number;
 }
 
 export interface Product {
@@ -42,8 +49,10 @@ export interface Product {
   specs?: ProductSpecs;
   stockByColor?: StockByColorItem[];
   stockByVariation?: StockByVariationItem[];
-  /** Storage options per color. Prefer this for storage selector when present. */
+  /** Storage options per color (includes price when present). Prefer for selector + price. */
   variationsByColor?: Record<string, VariationByColorItem[]>;
+  /** Per (color, storage) price in PKR. Backend uses this for validation; frontend can use for fallback. */
+  pricesByVariation?: PriceByVariationItem[];
 }
 
 export interface CartItem extends Product {
@@ -59,7 +68,8 @@ export function getCartLineId(item: CartItem): string {
 
 interface CartStore {
   items: CartItem[];
-  addItem: (product: Product, quantity?: number, size?: string, color?: string) => void;
+  /** variationPrice (PKR): when provided, used as item price instead of product.price (required for variation-based pricing). */
+  addItem: (product: Product, quantity?: number, size?: string, color?: string, variationPrice?: number) => void;
   removeItem: (lineId: string) => void;
   updateQuantity: (lineId: string, quantity: number) => void;
   clearCart: () => void;
@@ -72,7 +82,7 @@ export const useCartStore = create<CartStore>()(
     (set, get) => ({
       items: [],
       
-      addItem: (product, quantity = 1, size, color) => {
+      addItem: (product, quantity = 1, size, color, variationPrice) => {
         set((state) => {
           const existingItem = state.items.find(
             (item) => item.id === product.id && item.selectedSize === size && item.selectedColor === color
@@ -88,8 +98,9 @@ export const useCartStore = create<CartStore>()(
             };
           }
           
+          const price = variationPrice != null ? variationPrice : product.price;
           return {
-            items: [...state.items, { ...product, quantity, selectedSize: size, selectedColor: color }],
+            items: [...state.items, { ...product, price, quantity, selectedSize: size, selectedColor: color }],
           };
         });
       },

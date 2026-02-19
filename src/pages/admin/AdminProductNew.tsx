@@ -7,21 +7,18 @@ import { createProduct } from '@/api/admin-products';
 import { getCategories } from '@/api/categories';
 import { uploadProductImage, validateProductImageFile } from '@/api/upload';
 import { getProductImageUrl } from '@/lib/api';
-import type { ProductCreateInput, ProductColor, StockByVariationItem } from '@/types/admin';
+import type { ProductCreateInput, VariationRowWithColor } from '@/types/admin';
 import { STORAGE_OPTIONS } from '@/constants/storageOptions';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { ColorPickerRow } from '@/components/admin/ColorPickerRow';
 import { toast } from 'sonner';
 
-function parseList(s: string): string[] {
-  return s
-    .split(',')
-    .map((x) => x.trim())
-    .filter(Boolean);
+function toColorInputValue(hex: string): string {
+  const h = (hex || '').replace(/^#/, '').trim();
+  if (/^[0-9A-Fa-f]{6}$/.test(h)) return '#' + h;
+  if (/^[0-9A-Fa-f]{3}$/.test(h)) return '#' + h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  return '#cccccc';
 }
-
-const emptyColor = (): ProductColor => ({ name: '', hex: '' });
 
 export default function AdminProductNew() {
   const navigate = useNavigate();
@@ -39,12 +36,16 @@ export default function AdminProductNew() {
     sizes: [],
     specs: { processor: '', camera: '', battery: '', display: '' },
   });
-  const [colorRows, setColorRows] = useState<ProductColor[]>([emptyColor()]);
-  const [variationRows, setVariationRows] = useState<StockByVariationItem[]>([
-    { color: '', storage: STORAGE_OPTIONS[0], quantity: 0 },
+  const [variationRows, setVariationRows] = useState<VariationRowWithColor[]>([
+    { color: '', hex: '#cccccc', storage: STORAGE_OPTIONS[0], quantity: 0, price: 0 },
   ]);
-  const [sizesText, setSizesText] = useState('');
-  const colorOptions = useMemo(() => colorRows.map((c) => c.name.trim()).filter(Boolean), [colorRows]);
+  const derivedSizes = useMemo(
+    () =>
+      [...new Set(variationRows.map((r) => r.storage).filter(Boolean))].sort(
+        (a, b) => STORAGE_OPTIONS.indexOf(a as (typeof STORAGE_OPTIONS)[number]) - STORAGE_OPTIONS.indexOf(b as (typeof STORAGE_OPTIONS)[number])
+      ),
+    [variationRows]
+  );
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [previewImageError, setPreviewImageError] = useState(false);
@@ -65,27 +66,15 @@ export default function AdminProductNew() {
     }));
   };
 
-  const updateColor = (index: number, name: string, hex: string) => {
-    setColorRows((prev) => {
-      const next = [...prev];
-      next[index] = { name, hex };
-      return next;
-    });
-  };
-
-  const addColor = () => setColorRows((prev) => [...prev, emptyColor()]);
-  const removeColor = (index: number) =>
-    setColorRows((prev) => prev.filter((_, i) => i !== index));
-
-  const updateVariationRow = (index: number, color: string, storage: string, quantity: number) => {
+  const updateVariationRow = (index: number, patch: Partial<VariationRowWithColor>) => {
     setVariationRows((prev) => {
       const next = [...prev];
-      next[index] = { color, storage, quantity };
+      next[index] = { ...next[index], ...patch };
       return next;
     });
   };
   const addVariationRow = () =>
-    setVariationRows((prev) => [...prev, { color: colorOptions[0] ?? '', storage: STORAGE_OPTIONS[0], quantity: 0 }]);
+    setVariationRows((prev) => [...prev, { color: '', hex: '#cccccc', storage: STORAGE_OPTIONS[0], quantity: 0, price: form.price || 0 }]);
   const removeVariationRow = (index: number) =>
     setVariationRows((prev) => prev.filter((_, i) => i !== index));
 
@@ -114,9 +103,8 @@ export default function AdminProductNew() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const colors = colorRows.map((c) => ({ name: c.name.trim(), hex: (c.hex || '').trim() })).filter((c) => c.name);
     const filledRows = variationRows.filter((r) => r.color.trim() && r.storage.trim());
-    const key = (r: StockByVariationItem) => `${r.color.trim()}|${r.storage.trim()}`;
+    const key = (r: VariationRowWithColor) => `${r.color.trim()}|${r.storage.trim()}`;
     const seen = new Set<string>();
     const duplicate = filledRows.find((r) => {
       const k = key(r);
@@ -137,13 +125,31 @@ export default function AdminProductNew() {
           quantity: Math.max(0, Number(r.quantity) || 0),
         }))
         .filter((r) => r.quantity > 0 || r.color !== '' || r.storage !== '');
+      const pricesByVariation = variationRows
+        .filter((r) => r.color.trim() || r.storage.trim())
+        .map((r) => ({
+          color: r.color.trim(),
+          storage: r.storage.trim(),
+          price: Math.max(0, Number(r.price) || 0),
+        }))
+        .filter((r) => r.price > 0 || r.color !== '' || r.storage !== '');
+      const colorNamesSeen = new Set<string>();
+      const colors = variationRows
+        .filter((r) => r.color.trim())
+        .map((r) => ({ name: r.color.trim(), hex: (r.hex || '#cccccc').trim() }))
+        .filter((c) => {
+          if (colorNamesSeen.has(c.name)) return false;
+          colorNamesSeen.add(c.name);
+          return true;
+        });
       await createProduct(token, {
         ...form,
         price: Number(form.price) || 0,
         colors: colors.length ? colors : undefined,
-        sizes: parseList(sizesText),
+        sizes: derivedSizes,
         specs: form.specs,
         stockByVariation: stockByVariation.length ? stockByVariation : undefined,
+        pricesByVariation: pricesByVariation.length ? pricesByVariation : undefined,
       });
       toast.success('Product created');
       navigate('/admin/products');
@@ -338,47 +344,38 @@ export default function AdminProductNew() {
           </div>
 
           <div>
-            <h2 className="font-display text-lg font-semibold text-foreground mb-4">Colors</h2>
-            <p className="text-sm text-muted-foreground mb-4">Name and hex for each color. Click the circle to pick a color.</p>
-            <div className="space-y-3">
-            {colorRows.map((row, index) => (
-              <ColorPickerRow
-                key={index}
-                name={row.name}
-                hex={row.hex}
-                onNameChange={(name) => updateColor(index, name, row.hex)}
-                onHexChange={(hex) => updateColor(index, row.name, hex)}
-                onRemove={() => removeColor(index)}
-              />
-            ))}
-            <Button type="button" variant="outline" size="sm" className="rounded-xl w-full sm:w-auto" onClick={addColor}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add color
-            </Button>
-            </div>
-          </div>
-
-          <div>
-            <h2 className="font-display text-lg font-semibold text-foreground mb-4">Stock by variation</h2>
-            <p className="text-sm text-muted-foreground mb-4">Per color + storage. Choose a color from the list above and set storage size and quantity for each variant.</p>
+            <h2 className="font-display text-lg font-semibold text-foreground mb-4">Variations</h2>
+            <p className="text-sm text-muted-foreground mb-4">One row per variant: color name, hex, storage, quantity, and price (Rs.). Sizes below are derived from these rows.</p>
             <div className="space-y-3">
               {variationRows.map((row, index) => (
-                <div key={index} className="flex flex-wrap items-center gap-2">
-                  <select
+                <div key={index} className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-muted/40 border border-border/50">
+                  <input
+                    type="text"
                     value={row.color}
-                    onChange={(e) => updateVariationRow(index, e.target.value, row.storage, row.quantity)}
-                    className="input-field w-40 min-w-0 rounded-xl"
-                  >
-                    <option value="">Select color</option>
-                    {colorOptions.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(e) => updateVariationRow(index, { color: e.target.value })}
+                    placeholder="Color name"
+                    className="input-field w-36 min-w-0 rounded-xl text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={row.hex}
+                    onChange={(e) => updateVariationRow(index, { hex: e.target.value })}
+                    placeholder="#hex"
+                    className="input-field w-24 font-mono text-sm rounded-xl"
+                  />
+                  <label className="relative w-10 h-10 shrink-0 cursor-pointer block rounded-full overflow-hidden border-2 border-border shadow-sm hover:border-primary/50 transition-colors focus-within:ring-2 focus-within:ring-primary/30 focus-within:ring-offset-2">
+                    <span className="absolute inset-0 rounded-full" style={{ backgroundColor: row.hex || '#ccc' }} aria-hidden />
+                    <input
+                      type="color"
+                      value={toColorInputValue(row.hex)}
+                      onChange={(e) => updateVariationRow(index, { hex: e.target.value })}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      title="Pick color"
+                    />
+                  </label>
                   <select
                     value={STORAGE_OPTIONS.includes(row.storage as (typeof STORAGE_OPTIONS)[number]) ? row.storage : ''}
-                    onChange={(e) => updateVariationRow(index, row.color, e.target.value, row.quantity)}
+                    onChange={(e) => updateVariationRow(index, { storage: e.target.value })}
                     className="input-field w-28 min-w-0 rounded-xl"
                   >
                     <option value="">Storage</option>
@@ -392,44 +389,41 @@ export default function AdminProductNew() {
                     type="number"
                     min={0}
                     value={row.quantity}
-                    onChange={(e) => updateVariationRow(index, row.color, row.storage, Number(e.target.value) || 0)}
+                    onChange={(e) => updateVariationRow(index, { quantity: Number(e.target.value) || 0 })}
                     placeholder="Qty"
                     className="input-field w-24"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    value={row.price}
+                    onChange={(e) => updateVariationRow(index, { price: Number(e.target.value) || 0 })}
+                    placeholder="Rs."
+                    className="input-field w-28"
+                    title="Price (PKR)"
                   />
                   <Button type="button" variant="ghost" size="sm" className="rounded-lg text-destructive hover:text-destructive" onClick={() => removeVariationRow(index)} disabled={variationRows.length <= 1}>
                     Remove
                   </Button>
                 </div>
               ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="rounded-xl"
-                onClick={addVariationRow}
-                disabled={colorOptions.length === 0}
-              >
+              <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={addVariationRow}>
                 <Plus className="w-4 h-4 mr-2" />
                 Add variation row
               </Button>
-              {colorOptions.length === 0 && (
-                <p className="text-sm text-muted-foreground">Add at least one color above to add variations.</p>
-              )}
             </div>
           </div>
 
           <div>
             <h2 className="font-display text-lg font-semibold text-foreground mb-4">Sizes</h2>
-            <div>
-              <Label htmlFor="sizes" className="text-muted-foreground">Comma-separated (e.g. 128GB, 256GB)</Label>
-              <input
-                id="sizes"
-                value={sizesText}
-                onChange={(e) => setSizesText(e.target.value)}
-                placeholder="128GB, 256GB, 512GB"
-                className="input-field mt-1.5"
-              />
-            </div>
+            <p className="text-sm text-muted-foreground mb-2">Derived from variations above (read-only).</p>
+            <input
+              id="sizes"
+              readOnly
+              value={derivedSizes.join(', ')}
+              className="input-field mt-1.5 bg-muted/50 cursor-default"
+              placeholder="Add variation rows above to see storages"
+            />
           </div>
 
           {error && (

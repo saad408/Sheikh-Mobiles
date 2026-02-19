@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
+import OrderSuccess from "./pages/OrderSuccess";
 import Search from "./pages/Search";
 import NotFound from "./pages/NotFound";
 import { ProtectedRoute } from "./components/admin/ProtectedRoute";
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout" element={<Checkout />} />
+          <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/search" element={<Search />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route

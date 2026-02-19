@@ -106,6 +106,23 @@ const ProductDetail = () => {
   const maxQuantity = selectedStock != null ? Math.max(1, selectedStock) : undefined;
   const hasStorage = hasPerColorStorage || (product?.sizes?.length ?? 0) > 0;
 
+  const pricesByVariation = product?.pricesByVariation ?? [];
+  const selectedVariationPrice = product
+    ? (() => {
+        if (storageOptionsForColor.length > 0 && selectedSize != null) {
+          const v = storageOptionsForColor.find((s) => s.storage === selectedSize);
+          if (v?.price != null) return v.price;
+        }
+        if (pricesByVariation.length > 0 && selectedSize != null) {
+          const p = pricesByVariation.find(
+            (s) => s.color === (selectedColor ?? '') && s.storage === selectedSize
+          );
+          if (p != null) return p.price;
+        }
+        return product.price;
+      })()
+    : undefined;
+
   useEffect(() => {
     if (maxQuantity != null && quantity > maxQuantity) setQuantity(maxQuantity);
   }, [maxQuantity, quantity]);
@@ -161,7 +178,8 @@ const ProductDetail = () => {
     }
     const qty = maxQuantity != null ? Math.min(quantity, maxQuantity) : quantity;
     if (selectedStock === 0) return;
-    addItem(product, qty, size, selectedColor);
+    const variationPrice = selectedVariationPrice != null ? selectedVariationPrice : undefined;
+    addItem(product, qty, size, selectedColor, variationPrice);
     setIsAdded(true);
     toast.success('Added to cart', {
       description: `${product.name} × ${qty}`,
@@ -219,7 +237,11 @@ const ProductDetail = () => {
               {product.name}
             </h1>
             <p className="text-2xl lg:text-3xl font-bold gradient-text mb-4">
-              Rs. {product.price.toLocaleString()}
+              {selectedVariationPrice != null
+                ? `Rs. ${selectedVariationPrice.toLocaleString()}`
+                : (product.pricesByVariation?.length ?? 0) > 0 || Object.values(variationsByColor).some((list) => list?.some((v) => v.price != null))
+                  ? `From Rs. ${product.price.toLocaleString()}`
+                  : `Rs. ${product.price.toLocaleString()}`}
             </p>
             <p className="text-muted-foreground leading-relaxed mb-6">
               {product.description}
@@ -319,7 +341,7 @@ const ProductDetail = () => {
             <div className="flex-1">
               <p className="text-xs text-muted-foreground">Total</p>
               <p className="text-xl font-bold">
-                Rs. {(product.price * quantity).toLocaleString()}
+                Rs. {((selectedVariationPrice ?? product.price) * quantity).toLocaleString()}
               </p>
             </div>
             <motion.button
@@ -370,7 +392,7 @@ const ProductDetail = () => {
           <div className="flex-1">
             <p className="text-xs text-muted-foreground">Total</p>
             <p className="text-xl font-bold">
-              Rs. {(product.price * quantity).toLocaleString()}
+              Rs. {((selectedVariationPrice ?? product.price) * quantity).toLocaleString()}
             </p>
           </div>
           <motion.button

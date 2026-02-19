@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Zap, Shield, Truck, Search as SearchIcon, X } from 'lucide-react';
+import { ArrowRight, Zap, Shield, Truck, Search as SearchIcon, X, MapPin, Phone, MessageCircle, ExternalLink } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { ProductCard } from '@/components/product/ProductCard';
@@ -13,7 +13,7 @@ const SEARCH_DEBOUNCE_MS = 700;
 const features = [
   { icon: Zap, label: 'Fast Delivery' },
   { icon: Shield, label: 'Warranty' },
-  { icon: Truck, label: 'Free Shipping' },
+  { icon: Truck, label: 'Delivery' },
 ];
 
 const Index = () => {
@@ -255,6 +255,49 @@ const Index = () => {
           </>
         )}
       </section>
+
+      {/* Footer / Contact */}
+      <footer className="border-t border-border bg-muted/30 mt-8">
+        <div className="w-full max-w-5xl mx-auto px-4 py-8 md:py-10">
+          <h3 className="font-display text-lg font-semibold text-foreground mb-4">Visit or contact us</h3>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+            <a
+              href="https://maps.google.com/?q=Shop+number+A%2F6+first+floor+Din+plaza+Taxila"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-3 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <MapPin className="w-5 h-5 shrink-0 mt-0.5 text-primary" />
+              <span>Shop number A/6, first floor, Din plaza, Taxila</span>
+            </a>
+            <a
+              href="tel:+923171519605"
+              className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Phone className="w-5 h-5 shrink-0 text-primary" />
+              <span>+92 317 1519605</span>
+            </a>
+            <a
+              href="https://wa.me/923171519605"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <MessageCircle className="w-5 h-5 shrink-0 text-primary" />
+              <span>WhatsApp: +92 317 1519605</span>
+            </a>
+            <a
+              href="https://www.tiktok.com/@haseebmughal0222"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ExternalLink className="w-5 h-5 shrink-0 text-primary" />
+              <span>TikTok: @haseebmughal0222</span>
+            </a>
+          </div>
+        </div>
+      </footer>
 
       <MobileNav />
     </div>

@@ -51,6 +51,22 @@ export interface StockByVariationItem {
   quantity: number;
 }
 
+export interface PriceByVariationItem {
+  color: string;
+  storage: string;
+  price: number;
+}
+
+/** Admin form row: color, storage, quantity, and price (PKR) per variation */
+export interface VariationRowItem extends StockByVariationItem {
+  price: number;
+}
+
+/** Single variation table row: color name, hex, storage, quantity, price */
+export interface VariationRowWithColor extends VariationRowItem {
+  hex: string;
+}
+
 export interface ProductCreateInput {
   id: string;
   name: string;
@@ -63,6 +79,7 @@ export interface ProductCreateInput {
   specs?: Partial<ProductSpecs>;
   stockByColor?: StockByColorItem[];
   stockByVariation?: StockByVariationItem[];
+  pricesByVariation?: PriceByVariationItem[];
 }
 
 export interface ProductUpdateInput {
@@ -76,6 +93,7 @@ export interface ProductUpdateInput {
   specs?: Partial<ProductSpecs>;
   stockByColor?: StockByColorItem[];
   stockByVariation?: StockByVariationItem[];
+  pricesByVariation?: PriceByVariationItem[];
 }
 
 export interface ApiErrorResponse {

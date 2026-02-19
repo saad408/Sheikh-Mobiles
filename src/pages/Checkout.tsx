@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 
 const Checkout = () => {
   const navigate = useNavigate();
-  const { items, getTotalPrice, clearCart } = useCartStore();
+  const { items, getTotalPrice } = useCartStore();
   const [isProcessing, setIsProcessing] = useState(false);
   const [validation, setValidation] = useState<{
     result: CheckoutValidateResponse | null;
@@ -70,14 +70,11 @@ const Checkout = () => {
 
   const validResult = validation.result?.valid ? validation.result : null;
   const totalPrice = getTotalPrice();
-  const shippingClient = totalPrice > 500 ? 0 : 15;
-  const taxClient = Math.round(totalPrice * 0.08);
-  const totalClient = totalPrice + shippingClient + taxClient;
-
+  const SHIPPING_CHARGE = 1000;
+  const shipping = SHIPPING_CHARGE;
+  const tax = 0;
   const subtotal = validResult?.subtotal ?? totalPrice;
-  const shipping = validResult?.shippingCost ?? shippingClient;
-  const tax = validResult?.tax ?? taxClient;
-  const total = validResult?.total ?? totalClient;
+  const total = subtotal + shipping + tax;
 
   const validateField = (name: string, value: string): string => {
     const trimmed = value.trim();
@@ -147,7 +144,7 @@ const Checkout = () => {
           selectedSize: item.selectedSize ?? '',
         };
       });
-      const res = await createOrder({
+      await createOrder({
         items: orderItems,
         subtotal,
         shippingCost: shipping,
@@ -155,9 +152,8 @@ const Checkout = () => {
         total,
         shipping: shippingInfo,
       });
-      clearCart();
       toast.success('Order placed successfully!');
-      navigate('/', { replace: true });
+      navigate('/order-success', { replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Order failed');
     } finally {
@@ -185,6 +181,10 @@ const Checkout = () => {
       <Header title="Checkout" showBack />
 
       <div className="container-mobile pt-4 pb-32">
+        <div className="mb-4 py-3 px-4 rounded-xl bg-primary/10 border border-primary/20 text-sm text-foreground">
+          <p className="font-medium">Delivery charges: Rs. 1,000</p>
+          <p className="text-muted-foreground mt-1">You will need to pay Rs. 1,000 (shipping) before delivery. We will call you to confirm.</p>
+        </div>
         {validation.loading && (
           <div className="mb-4 py-3 px-4 rounded-xl bg-muted text-muted-foreground text-sm text-center">
             Verifying cart...
@@ -435,7 +435,7 @@ const Checkout = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Shipping</span>
-                    <span className="font-medium">{shipping === 0 ? 'Free' : `Rs. ${shipping}`}</span>
+                    <span className="font-medium">Rs. {shipping.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Tax</span>
