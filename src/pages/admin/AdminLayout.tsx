@@ -1,5 +1,5 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Package, FolderTree, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, FolderTree, ShoppingCart, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 
@@ -41,6 +41,13 @@ export default function AdminLayout() {
               >
                 <FolderTree className="w-4 h-4" />
                 Categories
+              </Link>
+              <Link
+                to="/admin/orders"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                Orders
               </Link>
             </nav>
           </div>

@@ -3,12 +3,13 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { PaginationMeta } from '@/api/products';
 
 interface ProductsPaginationProps {
-  pagination: PaginationMeta;
+  pagination: PaginationMeta | undefined;
   onPageChange: (page: number) => void;
   isLoading?: boolean;
 }
 
 export function ProductsPagination({ pagination, onPageChange, isLoading }: ProductsPaginationProps) {
+  if (!pagination) return null;
   const { page, totalPages, hasPrev, hasNext, summary } = pagination;
   if (totalPages <= 1) {
     return (

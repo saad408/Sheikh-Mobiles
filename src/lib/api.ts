@@ -106,9 +106,13 @@ export async function request<T>(path: string, config: RequestConfig = {}): Prom
   return data as T;
 }
 
-/** GET request with optional query params */
-export function get<T>(path: string, params?: RequestConfig['params']): Promise<T> {
-  return request<T>(path, { method: 'GET', params });
+/** GET request with optional query params and config (e.g. headers) */
+export function get<T>(
+  path: string,
+  params?: RequestConfig['params'],
+  config?: Omit<RequestConfig, 'method' | 'body'>
+): Promise<T> {
+  return request<T>(path, { method: 'GET', params, ...config });
 }
 
 /** POST request with JSON body */

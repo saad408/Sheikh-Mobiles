@@ -1,7 +1,7 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, CreditCard, Truck, Lock, ChevronRight, Package, AlertCircle } from 'lucide-react';
+import { Truck, Lock, AlertCircle } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { useCartStore } from '@/store/cartStore';
@@ -10,15 +10,10 @@ import { createOrder } from '@/api/orders';
 import type { CheckoutValidateResponse } from '@/api/checkout';
 import { toast } from 'sonner';
 
-type Step = 'shipping' | 'payment' | 'confirmation';
-const steps: Step[] = ['shipping', 'payment', 'confirmation'];
-
 const Checkout = () => {
   const navigate = useNavigate();
   const { items, getTotalPrice, clearCart } = useCartStore();
-  const [step, setStep] = useState<Step>('shipping');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [orderId, setOrderId] = useState<string | null>(null);
   const [validation, setValidation] = useState<{
     result: CheckoutValidateResponse | null;
     loading: boolean;
@@ -36,12 +31,7 @@ const Checkout = () => {
     country: '',
   });
 
-  const [paymentInfo, setPaymentInfo] = useState({
-    cardNumber: '',
-    expiry: '',
-    cvv: '',
-    name: '',
-  });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (items.length === 0) return;
@@ -89,13 +79,61 @@ const Checkout = () => {
   const tax = validResult?.tax ?? taxClient;
   const total = validResult?.total ?? totalClient;
 
-  const handleShippingSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setStep('payment');
+  const validateField = (name: string, value: string): string => {
+    const trimmed = value.trim();
+    if (!trimmed) return `${name} is required`;
+    
+    switch (name) {
+      case 'email':
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(trimmed)) return 'Please enter a valid email address';
+        break;
+      case 'phone':
+        const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+        if (!phoneRegex.test(trimmed) || trimmed.length < 8) return 'Please enter a valid phone number';
+        break;
+      case 'postalCode':
+        if (trimmed.length < 3) return 'Postal code must be at least 3 characters';
+        break;
+      case 'firstName':
+      case 'lastName':
+        if (trimmed.length < 2) return `${name} must be at least 2 characters`;
+        break;
+      case 'address':
+        if (trimmed.length < 5) return 'Address must be at least 5 characters';
+        break;
+      case 'city':
+      case 'country':
+        if (trimmed.length < 2) return `${name} must be at least 2 characters`;
+        break;
+    }
+    return '';
   };
 
-  const handlePaymentSubmit = async (e: React.FormEvent) => {
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    let isValid = true;
+
+    Object.entries(shippingInfo).forEach(([key, value]) => {
+      const error = validateField(key, value);
+      if (error) {
+        errors[key] = error;
+        isValid = false;
+      }
+    });
+
+    setFieldErrors(errors);
+    return isValid;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      toast.error('Please fill all fields correctly');
+      return;
+    }
+
     setIsProcessing(true);
     try {
       const orderItems = items.map((item, index) => {
@@ -117,10 +155,9 @@ const Checkout = () => {
         total,
         shipping: shippingInfo,
       });
-      setOrderId(res.orderId ?? null);
       clearCart();
-      setStep('confirmation');
       toast.success('Order placed successfully!');
+      navigate('/', { replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Order failed');
     } finally {
@@ -128,7 +165,7 @@ const Checkout = () => {
     }
   };
 
-  if (items.length === 0 && step !== 'confirmation') {
+  if (items.length === 0) {
     navigate('/cart');
     return null;
   }
@@ -175,48 +212,12 @@ const Checkout = () => {
           </div>
         )}
 
-        {/* Progress Steps */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          {steps.map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
-              <div
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                  step === s
-                    ? 'gradient-primary text-primary-foreground shadow-glow'
-                    : steps.indexOf(s) < steps.indexOf(step)
-                    ? 'bg-accent text-accent-foreground'
-                    : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                {steps.indexOf(s) < steps.indexOf(step) ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  i + 1
-                )}
-              </div>
-              {i < 2 && (
-                <div
-                  className={`w-10 h-1 rounded-full transition-colors ${
-                    steps.indexOf(s) < steps.indexOf(step)
-                      ? 'bg-accent'
-                      : 'bg-muted'
-                  }`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-
-        <AnimatePresence mode="wait">
-          {step === 'shipping' && (
-            <motion.form
-              key="shipping"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              onSubmit={handleShippingSubmit}
-              className="space-y-6"
-            >
+        <motion.form
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          onSubmit={handleSubmit}
+          className="space-y-6"
+        >
               <div>
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
@@ -234,9 +235,22 @@ const Checkout = () => {
                       type="text"
                       required
                       value={shippingInfo.firstName}
-                      onChange={(e) => setShippingInfo({ ...shippingInfo, firstName: e.target.value })}
-                      className="input-field"
+                      onChange={(e) => {
+                        setShippingInfo({ ...shippingInfo, firstName: e.target.value });
+                        if (fieldErrors.firstName) {
+                          const error = validateField('firstName', e.target.value);
+                          setFieldErrors({ ...fieldErrors, firstName: error });
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const error = validateField('firstName', e.target.value);
+                        setFieldErrors({ ...fieldErrors, firstName: error });
+                      }}
+                      className={`input-field ${fieldErrors.firstName ? 'border-destructive' : ''}`}
                     />
+                    {fieldErrors.firstName && (
+                      <p className="text-xs text-destructive mt-1">{fieldErrors.firstName}</p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
@@ -246,9 +260,22 @@ const Checkout = () => {
                       type="text"
                       required
                       value={shippingInfo.lastName}
-                      onChange={(e) => setShippingInfo({ ...shippingInfo, lastName: e.target.value })}
-                      className="input-field"
+                      onChange={(e) => {
+                        setShippingInfo({ ...shippingInfo, lastName: e.target.value });
+                        if (fieldErrors.lastName) {
+                          const error = validateField('lastName', e.target.value);
+                          setFieldErrors({ ...fieldErrors, lastName: error });
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const error = validateField('lastName', e.target.value);
+                        setFieldErrors({ ...fieldErrors, lastName: error });
+                      }}
+                      className={`input-field ${fieldErrors.lastName ? 'border-destructive' : ''}`}
                     />
+                    {fieldErrors.lastName && (
+                      <p className="text-xs text-destructive mt-1">{fieldErrors.lastName}</p>
+                    )}
                   </div>
                 </div>
 
@@ -258,9 +285,22 @@ const Checkout = () => {
                     type="email"
                     required
                     value={shippingInfo.email}
-                    onChange={(e) => setShippingInfo({ ...shippingInfo, email: e.target.value })}
-                    className="input-field"
+                    onChange={(e) => {
+                      setShippingInfo({ ...shippingInfo, email: e.target.value });
+                      if (fieldErrors.email) {
+                        const error = validateField('email', e.target.value);
+                        setFieldErrors({ ...fieldErrors, email: error });
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const error = validateField('email', e.target.value);
+                      setFieldErrors({ ...fieldErrors, email: error });
+                    }}
+                    className={`input-field ${fieldErrors.email ? 'border-destructive' : ''}`}
                   />
+                  {fieldErrors.email && (
+                    <p className="text-xs text-destructive mt-1">{fieldErrors.email}</p>
+                  )}
                 </div>
 
                 <div className="mt-3">
@@ -269,9 +309,22 @@ const Checkout = () => {
                     type="tel"
                     required
                     value={shippingInfo.phone}
-                    onChange={(e) => setShippingInfo({ ...shippingInfo, phone: e.target.value })}
-                    className="input-field"
+                    onChange={(e) => {
+                      setShippingInfo({ ...shippingInfo, phone: e.target.value });
+                      if (fieldErrors.phone) {
+                        const error = validateField('phone', e.target.value);
+                        setFieldErrors({ ...fieldErrors, phone: error });
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const error = validateField('phone', e.target.value);
+                      setFieldErrors({ ...fieldErrors, phone: error });
+                    }}
+                    className={`input-field ${fieldErrors.phone ? 'border-destructive' : ''}`}
                   />
+                  {fieldErrors.phone && (
+                    <p className="text-xs text-destructive mt-1">{fieldErrors.phone}</p>
+                  )}
                 </div>
 
                 <div className="mt-3">
@@ -280,9 +333,22 @@ const Checkout = () => {
                     type="text"
                     required
                     value={shippingInfo.address}
-                    onChange={(e) => setShippingInfo({ ...shippingInfo, address: e.target.value })}
-                    className="input-field"
+                    onChange={(e) => {
+                      setShippingInfo({ ...shippingInfo, address: e.target.value });
+                      if (fieldErrors.address) {
+                        const error = validateField('address', e.target.value);
+                        setFieldErrors({ ...fieldErrors, address: error });
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const error = validateField('address', e.target.value);
+                      setFieldErrors({ ...fieldErrors, address: error });
+                    }}
+                    className={`input-field ${fieldErrors.address ? 'border-destructive' : ''}`}
                   />
+                  {fieldErrors.address && (
+                    <p className="text-xs text-destructive mt-1">{fieldErrors.address}</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mt-3">
@@ -292,9 +358,22 @@ const Checkout = () => {
                       type="text"
                       required
                       value={shippingInfo.city}
-                      onChange={(e) => setShippingInfo({ ...shippingInfo, city: e.target.value })}
-                      className="input-field"
+                      onChange={(e) => {
+                        setShippingInfo({ ...shippingInfo, city: e.target.value });
+                        if (fieldErrors.city) {
+                          const error = validateField('city', e.target.value);
+                          setFieldErrors({ ...fieldErrors, city: error });
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const error = validateField('city', e.target.value);
+                        setFieldErrors({ ...fieldErrors, city: error });
+                      }}
+                      className={`input-field ${fieldErrors.city ? 'border-destructive' : ''}`}
                     />
+                    {fieldErrors.city && (
+                      <p className="text-xs text-destructive mt-1">{fieldErrors.city}</p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Postal Code</label>
@@ -302,9 +381,22 @@ const Checkout = () => {
                       type="text"
                       required
                       value={shippingInfo.postalCode}
-                      onChange={(e) => setShippingInfo({ ...shippingInfo, postalCode: e.target.value })}
-                      className="input-field"
+                      onChange={(e) => {
+                        setShippingInfo({ ...shippingInfo, postalCode: e.target.value });
+                        if (fieldErrors.postalCode) {
+                          const error = validateField('postalCode', e.target.value);
+                          setFieldErrors({ ...fieldErrors, postalCode: error });
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const error = validateField('postalCode', e.target.value);
+                        setFieldErrors({ ...fieldErrors, postalCode: error });
+                      }}
+                      className={`input-field ${fieldErrors.postalCode ? 'border-destructive' : ''}`}
                     />
+                    {fieldErrors.postalCode && (
+                      <p className="text-xs text-destructive mt-1">{fieldErrors.postalCode}</p>
+                    )}
                   </div>
                 </div>
 
@@ -314,93 +406,22 @@ const Checkout = () => {
                     type="text"
                     required
                     value={shippingInfo.country}
-                    onChange={(e) => setShippingInfo({ ...shippingInfo, country: e.target.value })}
-                    className="input-field"
+                    onChange={(e) => {
+                      setShippingInfo({ ...shippingInfo, country: e.target.value });
+                      if (fieldErrors.country) {
+                        const error = validateField('country', e.target.value);
+                        setFieldErrors({ ...fieldErrors, country: error });
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const error = validateField('country', e.target.value);
+                      setFieldErrors({ ...fieldErrors, country: error });
+                    }}
+                    className={`input-field ${fieldErrors.country ? 'border-destructive' : ''}`}
                   />
-                </div>
-              </div>
-
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                type="submit"
-                className="w-full btn-primary flex items-center justify-center gap-2"
-              >
-                Continue to Payment
-                <ChevronRight className="w-4 h-4" />
-              </motion.button>
-            </motion.form>
-          )}
-
-          {step === 'payment' && (
-            <motion.form
-              key="payment"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              onSubmit={handlePaymentSubmit}
-              className="space-y-6"
-            >
-              <div>
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
-                    <CreditCard className="w-5 h-5 text-primary-foreground" />
-                  </div>
-                  <h2 className="font-display text-xl font-bold">Payment</h2>
-                </div>
-
-                <div className="bg-secondary rounded-xl p-4 mb-5 flex items-center gap-3">
-                  <Lock className="w-5 h-5 text-accent" />
-                  <p className="text-sm text-muted-foreground">
-                    Your payment info is secure and encrypted
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Card Number</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="1234 5678 9012 3456"
-                    value={paymentInfo.cardNumber}
-                    onChange={(e) => setPaymentInfo({ ...paymentInfo, cardNumber: e.target.value })}
-                    className="input-field"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Expiry</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="MM/YY"
-                      value={paymentInfo.expiry}
-                      onChange={(e) => setPaymentInfo({ ...paymentInfo, expiry: e.target.value })}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">CVV</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="123"
-                      value={paymentInfo.cvv}
-                      onChange={(e) => setPaymentInfo({ ...paymentInfo, cvv: e.target.value })}
-                      className="input-field"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-3">
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Name on Card</label>
-                  <input
-                    type="text"
-                    required
-                    value={paymentInfo.name}
-                    onChange={(e) => setPaymentInfo({ ...paymentInfo, name: e.target.value })}
-                    className="input-field"
-                  />
+                  {fieldErrors.country && (
+                    <p className="text-xs text-destructive mt-1">{fieldErrors.country}</p>
+                  )}
                 </div>
               </div>
 
@@ -410,7 +431,7 @@ const Checkout = () => {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-medium">Rs. {totalPrice.toLocaleString()}</span>
+                    <span className="font-medium">Rs. {subtotal.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Shipping</span>
@@ -441,47 +462,11 @@ const Checkout = () => {
                 ) : (
                   <>
                     <Lock className="w-4 h-4" />
-                    Pay Rs. {total.toLocaleString()}
+                    Place Order - Rs. {total.toLocaleString()}
                   </>
                 )}
               </motion.button>
             </motion.form>
-          )}
-
-          {step === 'confirmation' && (
-            <motion.div
-              key="confirmation"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="text-center py-12"
-            >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2, type: 'spring' }}
-                className="w-24 h-24 rounded-full bg-accent/20 flex items-center justify-center mx-auto mb-6"
-              >
-                <Package className="w-12 h-12 text-accent" />
-              </motion.div>
-              <h2 className="font-display text-2xl font-bold mb-2">
-                Order Confirmed! 🎉
-              </h2>
-              <p className="text-muted-foreground mb-6">
-                We've sent a confirmation to {shippingInfo.email || 'your email'}
-              </p>
-              <p className="text-sm font-mono bg-secondary px-4 py-2 rounded-lg inline-block mb-8">
-                Order #{orderId || Date.now().toString().slice(-8)}
-              </p>
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/')}
-                className="btn-primary w-full"
-              >
-                Continue Shopping
-              </motion.button>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       <MobileNav />

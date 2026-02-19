@@ -18,6 +18,8 @@ import AdminProductEdit from "./pages/admin/AdminProductEdit";
 import AdminCategoriesList from "./pages/admin/AdminCategoriesList";
 import AdminCategoryNew from "./pages/admin/AdminCategoryNew";
 import AdminCategoryEdit from "./pages/admin/AdminCategoryEdit";
+import AdminOrdersList from "./pages/admin/AdminOrdersList";
+import AdminOrderDetail from "./pages/admin/AdminOrderDetail";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +51,8 @@ const App = () => (
             <Route path="categories" element={<AdminCategoriesList />} />
             <Route path="categories/new" element={<AdminCategoryNew />} />
             <Route path="categories/edit/:id" element={<AdminCategoryEdit />} />
+            <Route path="orders" element={<AdminOrdersList />} />
+            <Route path="orders/:orderId" element={<AdminOrderDetail />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
